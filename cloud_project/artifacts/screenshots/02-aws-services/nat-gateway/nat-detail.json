@@ -1,0 +1,43 @@
+{
+    "NatGateways": [
+        {
+            "CreateTime": "2026-10-28T13:34:54+00:00",
+            "NatGatewayAddresses": [
+                {
+                    "AllocationId": "eipalloc-06945a8a1d60b0797",
+                    "NetworkInterfaceId": "eni-0e169b9861eecf606",
+                    "PrivateIp": "10.42.0.199",
+                    "PublicIp": "3.230.51.121",
+                    "AssociationId": "eipassoc-03fa0d1b50b1fa04d",
+                    "IsPrimary": true,
+                    "Status": "succeeded"
+                }
+            ],
+            "NatGatewayId": "nat-05c4cdd1b3e7851cd",
+            "State": "available",
+            "SubnetId": "subnet-0936e2188b412d515",
+            "VpcId": "vpc-02927f94a1b45880c",
+            "Tags": [
+                {
+                    "Key": "Project",
+                    "Value": "paylink"
+                },
+                {
+                    "Key": "ManagedBy",
+                    "Value": "terraform"
+                },
+                {
+                    "Key": "Course",
+                    "Value": "cloud-project"
+                },
+                {
+                    "Key": "Name",
+                    "Value": "paylink-nat-a"
+                }
+            ],
+            "ConnectivityType": "public",
+            "AvailabilityMode": "zonal",
+            "AttachedAppliances": []
+        }
+    ]
+}

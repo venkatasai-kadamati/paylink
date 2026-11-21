@@ -1,0 +1,10 @@
+# file|seconds|caption  (paths relative to artifacts/screenshots/)
+03-adhoc-working-proof/01-cross-validation-checklist.png|5|Cross-validation against course diagrams
+02-aws-services/vpc/00-console-vpc-resource-map.png|5|VPC resource map (Console)
+02-aws-services/cloudfront/01-console-cloudfront-vpc-origin.png|5|CloudFront VPC origin to internal ALB
+02-aws-services/alb/00-console-alb-details.png|4|Internal ALB (Console)
+02-aws-services/ecs-fargate/00-console-ecs-cluster-services.png|4|ECS Fargate frontend and backend
+02-aws-services/rds/03-console-rds-multi-az.png|4|RDS PostgreSQL Multi-AZ
+01-application-ui-and-logs/03-api-health-card.png|4|/api/health via CloudFront
+01-application-ui-and-logs/01-signin-page.png|4|Sign-in page
+03-adhoc-working-proof/05-ui-quicktest-sai-dashboard.png|6|Quick-test Sai dashboard

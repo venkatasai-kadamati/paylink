@@ -1,0 +1,38 @@
+[
+    {
+        "SubnetId": "subnet-0455cb83bcadad7e6",
+        "Cidr": "10.42.11.0/24",
+        "Az": "us-east-1b",
+        "Name": "paylink-app-b"
+    },
+    {
+        "SubnetId": "subnet-007ae6f4a16c2c923",
+        "Cidr": "10.42.10.0/24",
+        "Az": "us-east-1a",
+        "Name": "paylink-app-a"
+    },
+    {
+        "SubnetId": "subnet-0936e2188b412d515",
+        "Cidr": "10.42.0.0/24",
+        "Az": "us-east-1a",
+        "Name": "paylink-public-a"
+    },
+    {
+        "SubnetId": "subnet-05f455aa8b48d87d6",
+        "Cidr": "10.42.21.0/24",
+        "Az": "us-east-1b",
+        "Name": "paylink-db-b"
+    },
+    {
+        "SubnetId": "subnet-0a7e437635464f94f",
+        "Cidr": "10.42.20.0/24",
+        "Az": "us-east-1a",
+        "Name": "paylink-db-a"
+    },
+    {
+        "SubnetId": "subnet-03a21ad9995f7a9e7",
+        "Cidr": "10.42.1.0/24",
+        "Az": "us-east-1b",
+        "Name": "paylink-public-b"
+    }
+]

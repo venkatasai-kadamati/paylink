@@ -1,0 +1,32 @@
+{
+    "repositories": [
+        {
+            "repositoryArn": "arn:aws:ecr:us-east-1:223662763933:repository/paylink-frontend",
+            "registryId": "223662763933",
+            "repositoryName": "paylink-frontend",
+            "repositoryUri": "223662763933.dkr.ecr.us-east-1.amazonaws.com/paylink-frontend",
+            "createdAt": "2026-10-28T08:34:40.866000-05:00",
+            "imageTagMutability": "MUTABLE",
+            "imageScanningConfiguration": {
+                "scanOnPush": true
+            },
+            "encryptionConfiguration": {
+                "encryptionType": "AES256"
+            }
+        },
+        {
+            "repositoryArn": "arn:aws:ecr:us-east-1:223662763933:repository/paylink-backend",
+            "registryId": "223662763933",
+            "repositoryName": "paylink-backend",
+            "repositoryUri": "223662763933.dkr.ecr.us-east-1.amazonaws.com/paylink-backend",
+            "createdAt": "2026-10-28T08:37:14.838000-05:00",
+            "imageTagMutability": "MUTABLE",
+            "imageScanningConfiguration": {
+                "scanOnPush": true
+            },
+            "encryptionConfiguration": {
+                "encryptionType": "AES256"
+            }
+        }
+    ]
+}

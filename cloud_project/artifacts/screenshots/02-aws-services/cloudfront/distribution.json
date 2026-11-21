@@ -1,0 +1,29 @@
+{
+    "Id": "E277F39JS5N2K5",
+    "Domain": "d24noy17jz9fuj.cloudfront.net",
+    "Status": "Deployed",
+    "Origins": {
+        "Quantity": 1,
+        "Items": [
+            {
+                "Id": "paylink-internal-alb",
+                "DomainName": "internal-paylink-alb-1853256455.us-east-1.elb.amazonaws.com",
+                "OriginPath": "",
+                "CustomHeaders": {
+                    "Quantity": 0
+                },
+                "VpcOriginConfig": {
+                    "VpcOriginId": "vo_D89YQTuwCHYCIJWIsLTp1l",
+                    "OriginReadTimeout": 30,
+                    "OriginKeepaliveTimeout": 5
+                },
+                "ConnectionAttempts": 3,
+                "ConnectionTimeout": 10,
+                "OriginShield": {
+                    "Enabled": false
+                },
+                "OriginAccessControlId": ""
+            }
+        ]
+    }
+}

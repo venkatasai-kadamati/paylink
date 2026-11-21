@@ -18,3 +18,13 @@ supabase/.temp/
 core
 core.*
 .DS_Store
+# cloud_project Terraform local state / vars (also gitignored under cloud_project/terraform/)
+cloud_project/terraform/.terraform/
+cloud_project/terraform/*.tfstate
+cloud_project/terraform/*.tfstate.*
+cloud_project/terraform/tfplan
+cloud_project/terraform/terraform.tfvars
+
+# Local CloudWatch runtime log captures (screenshots and other deliverables remain tracked).
+cloud_project/artifacts/screenshots/**/backend-recent-logs.txt
+cloud_project/artifacts/screenshots/**/frontend-recent-logs.txt

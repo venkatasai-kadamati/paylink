@@ -1,0 +1,12 @@
+[
+    {
+        "name": "paylink-frontend",
+        "desired": 2,
+        "running": 2
+    },
+    {
+        "name": "paylink-backend",
+        "desired": 2,
+        "running": 2
+    }
+]

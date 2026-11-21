@@ -2,7 +2,10 @@
 .env
 .env.*
 .venv
+.local
 frontend/node_modules
 frontend/.next
 artifacts
 docs
+cloud_project/artifacts
+cloud_project/terraform/.terraform

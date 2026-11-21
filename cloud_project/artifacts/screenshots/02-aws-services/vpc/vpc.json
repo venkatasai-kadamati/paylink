@@ -1,0 +1,22 @@
+{
+    "VpcId": "vpc-02927f94a1b45880c",
+    "Cidr": "10.42.0.0/16",
+    "Tags": [
+        {
+            "Key": "Project",
+            "Value": "paylink"
+        },
+        {
+            "Key": "Name",
+            "Value": "paylink-vpc"
+        },
+        {
+            "Key": "ManagedBy",
+            "Value": "terraform"
+        },
+        {
+            "Key": "Course",
+            "Value": "cloud-project"
+        }
+    ]
+}

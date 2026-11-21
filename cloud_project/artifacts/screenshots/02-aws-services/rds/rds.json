@@ -1,0 +1,8 @@
+{
+    "Id": "paylink-postgres",
+    "Engine": "postgres",
+    "Class": "db.t4g.micro",
+    "MultiAZ": true,
+    "Encrypted": true,
+    "Status": "available"
+}

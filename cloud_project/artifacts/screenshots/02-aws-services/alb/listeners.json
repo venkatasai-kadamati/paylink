@@ -1,0 +1,28 @@
+{
+    "Listeners": [
+        {
+            "ListenerArn": "arn:aws:elasticloadbalancing:us-east-1:223662763933:listener/app/paylink-alb/c5d6a1107a99673a/f0d95323d064a215",
+            "LoadBalancerArn": "arn:aws:elasticloadbalancing:us-east-1:223662763933:loadbalancer/app/paylink-alb/c5d6a1107a99673a",
+            "Port": 80,
+            "Protocol": "HTTP",
+            "DefaultActions": [
+                {
+                    "Type": "forward",
+                    "TargetGroupArn": "arn:aws:elasticloadbalancing:us-east-1:223662763933:targetgroup/paylink-fe-tg/b5bbd019577415bf",
+                    "Order": 1,
+                    "ForwardConfig": {
+                        "TargetGroups": [
+                            {
+                                "TargetGroupArn": "arn:aws:elasticloadbalancing:us-east-1:223662763933:targetgroup/paylink-fe-tg/b5bbd019577415bf",
+                                "Weight": 1
+                            }
+                        ],
+                        "TargetGroupStickinessConfig": {
+                            "Enabled": false
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}

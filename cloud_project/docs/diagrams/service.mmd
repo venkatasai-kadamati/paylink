@@ -1,0 +1,7 @@
+%% PayLink service architecture — ONE internal ALB
+flowchart LR
+  U[Browser / Users] -->|HTTPS| CF[CloudFront<br/>public HTTPS entry]
+  CF -->|VPC origin private| ALB[Application Load Balancer<br/>single resource · internal]
+  ALB -->|"/api/*"| BE[ECS Fargate<br/>Backend FastAPI · 2–4 tasks]
+  ALB -->|"/* default"| FE[ECS Fargate<br/>Frontend Next.js · 2 tasks]
+  BE --> RDS[(RDS PostgreSQL<br/>Multi-AZ primary + standby)]

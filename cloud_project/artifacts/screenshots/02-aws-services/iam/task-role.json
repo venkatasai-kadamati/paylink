@@ -1,0 +1,4 @@
+{
+    "RoleName": "paylink-ecs-task",
+    "Arn": "arn:aws:iam::223662763933:role/paylink-ecs-task"
+}

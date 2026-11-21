@@ -1,0 +1,19 @@
+{
+    "Id": "vo_D89YQTuwCHYCIJWIsLTp1l",
+    "Arn": "arn:aws:cloudfront::223662763933:vpcorigin/vo_D89YQTuwCHYCIJWIsLTp1l",
+    "Status": "Deployed",
+    "Endpoint": {
+        "Name": "paylink-alb-vpc-origin",
+        "Arn": "arn:aws:elasticloadbalancing:us-east-1:223662763933:loadbalancer/app/paylink-alb/c5d6a1107a99673a",
+        "HTTPPort": 80,
+        "HTTPSPort": 443,
+        "OriginProtocolPolicy": "http-only",
+        "OriginSslProtocols": {
+            "Quantity": 1,
+            "Items": [
+                "TLSv1.2"
+            ]
+        },
+        "IpAddressType": "ipv4"
+    }
+}

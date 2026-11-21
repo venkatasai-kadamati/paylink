@@ -1,0 +1,17 @@
+{
+    "Name": "paylink-alb",
+    "Scheme": "internal",
+    "DNS": "internal-paylink-alb-1853256455.us-east-1.elb.amazonaws.com",
+    "AZs": [
+        {
+            "ZoneName": "us-east-1a",
+            "SubnetId": "subnet-007ae6f4a16c2c923",
+            "LoadBalancerAddresses": []
+        },
+        {
+            "ZoneName": "us-east-1b",
+            "SubnetId": "subnet-0455cb83bcadad7e6",
+            "LoadBalancerAddresses": []
+        }
+    ]
+}

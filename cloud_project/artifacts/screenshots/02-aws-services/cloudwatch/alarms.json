@@ -1,0 +1,100 @@
+{
+    "MetricAlarms": [
+        {
+            "AlarmName": "paylink-alb-unhealthy-hosts",
+            "AlarmArn": "arn:aws:cloudwatch:us-east-1:223662763933:alarm:paylink-alb-unhealthy-hosts",
+            "AlarmDescription": "ALB reports unhealthy targets - check ECS tasks / health checks",
+            "AlarmConfigurationUpdatedTimestamp": "2026-10-28T08:39:49.138000-05:00",
+            "ActionsEnabled": true,
+            "OKActions": [],
+            "AlarmActions": [],
+            "InsufficientDataActions": [],
+            "StateValue": "OK",
+            "StateReason": "Threshold Crossed: 1 datapoint [0.0 (28/10/26 13:53:00)] was not greater than the threshold (0.0).",
+            "StateReasonData": "{\"version\":\"1.0\",\"queryDate\":\"2026-10-28T13:56:32.554+0000\",\"startDate\":\"2026-10-28T13:53:00.000+0000\",\"statistic\":\"Average\",\"period\":60,\"recentDatapoints\":[0.0],\"threshold\":0.0,\"evaluatedDatapoints\":[{\"timestamp\":\"2026-10-28T13:53:00.000+0000\",\"sampleCount\":2.0,\"value\":0.0}]}",
+            "StateUpdatedTimestamp": "2026-10-28T08:56:32.555000-05:00",
+            "MetricName": "UnHealthyHostCount",
+            "Namespace": "AWS/ApplicationELB",
+            "Statistic": "Average",
+            "Dimensions": [
+                {
+                    "Name": "LoadBalancer",
+                    "Value": "app/paylink-alb/c5d6a1107a99673a"
+                },
+                {
+                    "Name": "TargetGroup",
+                    "Value": "targetgroup/paylink-be-tg/b5283c90e222f105"
+                }
+            ],
+            "Period": 60,
+            "EvaluationPeriods": 2,
+            "Threshold": 0.0,
+            "ComparisonOperator": "GreaterThanThreshold",
+            "TreatMissingData": "missing",
+            "StateTransitionedTimestamp": "2026-10-28T08:56:32.555000-05:00"
+        },
+        {
+            "AlarmName": "paylink-backend-cpu-high",
+            "AlarmArn": "arn:aws:cloudwatch:us-east-1:223662763933:alarm:paylink-backend-cpu-high",
+            "AlarmDescription": "Backend ECS CPU > 70% for 2 minutes (scaling / capacity signal)",
+            "AlarmConfigurationUpdatedTimestamp": "2026-10-28T08:52:27.618000-05:00",
+            "ActionsEnabled": true,
+            "OKActions": [],
+            "AlarmActions": [],
+            "InsufficientDataActions": [],
+            "StateValue": "OK",
+            "StateReason": "Threshold Crossed: 1 datapoint [5.821540003021558 (28/10/26 13:53:00)] was not greater than the threshold (70.0).",
+            "StateReasonData": "{\"version\":\"1.0\",\"queryDate\":\"2026-10-28T13:56:30.978+0000\",\"startDate\":\"2026-10-28T13:53:00.000+0000\",\"statistic\":\"Average\",\"period\":60,\"recentDatapoints\":[5.821540003021558],\"threshold\":70.0,\"evaluatedDatapoints\":[{\"timestamp\":\"2026-10-28T13:53:00.000+0000\",\"sampleCount\":2.0,\"value\":5.821540003021558}]}",
+            "StateUpdatedTimestamp": "2026-10-28T08:56:30.979000-05:00",
+            "MetricName": "CPUUtilization",
+            "Namespace": "AWS/ECS",
+            "Statistic": "Average",
+            "Dimensions": [
+                {
+                    "Name": "ClusterName",
+                    "Value": "paylink-cluster"
+                },
+                {
+                    "Name": "ServiceName",
+                    "Value": "paylink-backend"
+                }
+            ],
+            "Period": 60,
+            "EvaluationPeriods": 2,
+            "Threshold": 70.0,
+            "ComparisonOperator": "GreaterThanThreshold",
+            "TreatMissingData": "missing",
+            "StateTransitionedTimestamp": "2026-10-28T08:56:30.979000-05:00"
+        },
+        {
+            "AlarmName": "paylink-rds-cpu-high",
+            "AlarmArn": "arn:aws:cloudwatch:us-east-1:223662763933:alarm:paylink-rds-cpu-high",
+            "AlarmDescription": "RDS CPU high - capacity / query investigation",
+            "AlarmConfigurationUpdatedTimestamp": "2026-10-28T08:52:25.839000-05:00",
+            "ActionsEnabled": true,
+            "OKActions": [],
+            "AlarmActions": [],
+            "InsufficientDataActions": [],
+            "StateValue": "INSUFFICIENT_DATA",
+            "StateReason": "Unchecked: Initial alarm creation",
+            "StateUpdatedTimestamp": "2026-10-28T08:52:25.839000-05:00",
+            "MetricName": "CPUUtilization",
+            "Namespace": "AWS/RDS",
+            "Statistic": "Average",
+            "Dimensions": [
+                {
+                    "Name": "DBInstanceIdentifier",
+                    "Value": "db-SLBGLY7XAQGFNH5MVOMSLZRKF4"
+                }
+            ],
+            "Period": 60,
+            "EvaluationPeriods": 3,
+            "Threshold": 80.0,
+            "ComparisonOperator": "GreaterThanThreshold",
+            "TreatMissingData": "missing",
+            "StateTransitionedTimestamp": "2026-10-28T08:52:25.839000-05:00"
+        }
+    ],
+    "CompositeAlarms": [],
+    "LogAlarms": []
+}

@@ -1,0 +1,25 @@
+%% PayLink network — ONE ALB spanning both AZs (not two ALBs)
+flowchart TB
+  CF[CloudFront] -->|VPC origin| ALB["paylink-alb<br/>ONE ALB · Multi-AZ ENIs"]
+
+  subgraph VPC["VPC 10.42.0.0/16"]
+    direction TB
+    ALB
+
+    subgraph AZa["us-east-1a"]
+      PubA["Public 10.42.0.0/24<br/>NAT Gateway"]
+      AppA["Private app 10.42.10.0/24<br/>FE task · BE task"]
+      DbA["Isolated DB 10.42.20.0/24<br/>RDS Primary"]
+    end
+
+    subgraph AZb["us-east-1b"]
+      PubB["Public 10.42.1.0/24"]
+      AppB["Private app 10.42.11.0/24<br/>FE task · BE task"]
+      DbB["Isolated DB 10.42.21.0/24<br/>RDS Standby"]
+    end
+  end
+
+  ALB -.-> AppA
+  ALB -.-> AppB
+  AppA --> DbA
+  AppB -.-> DbA
