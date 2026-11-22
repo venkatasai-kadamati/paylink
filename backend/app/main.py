@@ -247,7 +247,16 @@ def send(body:TransferCreate,user:User):
     except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
     except errors.CheckViolation: raise HTTPException(409,'Transfer exceeds an account limit')
 
-HISTORY_SQL = '''WITH mine AS (SELECT account_id FROM paylink.account_holders WHERE user_id=%s)
+HISTORY_SQL = '''WITH mine AS (SELECT account_id FROM paylink.account_holders WHERE user_id=%s),
+ candidates AS (
+ SELECT t.id,t.created_at FROM mine m CROSS JOIN LATERAL (
+   SELECT id,created_at FROM paylink.transfers WHERE source_account_id=m.account_id
+   ORDER BY created_at DESC,id DESC LIMIT 200) t
+ UNION
+ SELECT t.id,t.created_at FROM mine m CROSS JOIN LATERAL (
+   SELECT id,created_at FROM paylink.transfers WHERE destination_account_id=m.account_id
+   ORDER BY created_at DESC,id DESC LIMIT 200) t),
+ recent AS (SELECT id,created_at FROM candidates ORDER BY created_at DESC,id DESC LIMIT 200)
  SELECT t.id,t.amount_cents,t.memo,t.created_at,t.source_account_id,t.destination_account_id,
  CASE WHEN t.source_account_id IN(SELECT account_id FROM mine) AND t.destination_account_id IN(SELECT account_id FROM mine)
  THEN 'internal' WHEN t.source_account_id IN(SELECT account_id FROM mine) THEN 'sent' ELSE 'received' END AS direction,
@@ -255,9 +264,9 @@ HISTORY_SQL = '''WITH mine AS (SELECT account_id FROM paylink.account_holders WH
  COALESCE((SELECT u.full_name FROM paylink.account_holders h JOIN paylink.users u ON u.id=h.user_id
  WHERE h.account_id=CASE WHEN t.source_account_id IN(SELECT account_id FROM mine)
  THEN t.destination_account_id ELSE t.source_account_id END ORDER BY h.joined_at,u.id LIMIT 1),'Account') AS counterparty
- FROM paylink.transfers t JOIN paylink.bank_accounts s ON s.id=t.source_account_id
+ FROM recent r JOIN paylink.transfers t ON t.id=r.id
+ JOIN paylink.bank_accounts s ON s.id=t.source_account_id
  JOIN paylink.bank_accounts d ON d.id=t.destination_account_id
- WHERE t.source_account_id IN(SELECT account_id FROM mine) OR t.destination_account_id IN(SELECT account_id FROM mine)
  ORDER BY t.created_at DESC,t.id DESC LIMIT 200'''
 @app.get('/api/transfers')
 def history(user:User):
@@ -289,10 +298,17 @@ def insights(user:User):
           FROM paylink.transfers WHERE created_at>=date_trunc('month',now())
           AND (source_account_id IN(SELECT account_id FROM mine) OR destination_account_id IN(SELECT account_id FROM mine))''',(user['id'],)).fetchone()
         weekly=c.execute('''WITH days AS(SELECT generate_series(current_date-6,current_date,'1 day')::date AS day),
-          mine AS(SELECT account_id FROM paylink.account_holders WHERE user_id=%s)
+          mine AS(SELECT account_id FROM paylink.account_holders WHERE user_id=%s),
+          relevant AS MATERIALIZED (
+            SELECT t.id,t.amount_cents,t.created_at,t.source_account_id,t.destination_account_id
+            FROM mine m JOIN paylink.transfers t ON t.source_account_id=m.account_id
+            WHERE t.created_at>=current_date-6 AND t.created_at<current_date+interval '1 day'
+            UNION
+            SELECT t.id,t.amount_cents,t.created_at,t.source_account_id,t.destination_account_id
+            FROM mine m JOIN paylink.transfers t ON t.destination_account_id=m.account_id
+            WHERE t.created_at>=current_date-6 AND t.created_at<current_date+interval '1 day')
           SELECT days.day,coalesce(sum(t.amount_cents) FILTER(WHERE t.source_account_id IN(SELECT account_id FROM mine)),0)::bigint AS sent,
           coalesce(sum(t.amount_cents) FILTER(WHERE t.destination_account_id IN(SELECT account_id FROM mine)),0)::bigint AS received
-          FROM days LEFT JOIN paylink.transfers t ON t.created_at>=days.day AND t.created_at<days.day+interval '1 day'
-          AND (t.source_account_id IN(SELECT account_id FROM mine) OR t.destination_account_id IN(SELECT account_id FROM mine))
+          FROM days LEFT JOIN relevant t ON t.created_at>=days.day AND t.created_at<days.day+interval '1 day'
           GROUP BY days.day ORDER BY days.day''',(user['id'],)).fetchall()
     return {'monthly':monthly,'weekly':weekly}
