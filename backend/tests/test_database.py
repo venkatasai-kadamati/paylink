@@ -1,5 +1,6 @@
 """Integration checks on real PostgreSQL, isolated by unique fixture identities."""
 from concurrent.futures import ThreadPoolExecutor
+import importlib.util
 from uuid import uuid4
 from pathlib import Path
 import pytest
@@ -7,6 +8,45 @@ import psycopg
 from psycopg import errors
 from dotenv import dotenv_values
 C=dotenv_values(Path(__file__).resolve().parents[2]/'.env')
+
+
+def test_synthetic_generator_isolated_and_deterministic():
+    spec = importlib.util.spec_from_file_location('synthetic_data', Path(__file__).resolve().parents[2]/'scripts/synthetic_data.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    namespace = uuid4().hex[:10]
+    prefix = 'syn_' + namespace + '_'
+    with psycopg.connect(C['ADMIN_DATABASE_URL']) as c:
+        assert c.execute("SELECT to_regclass('paylink.transfers_created_time_idx')").fetchone()[0]
+        def snapshot():
+            result = []
+            for table, predicate in (
+                ('users', 'starts_with(username,%s)'),
+                ('banks', 'starts_with(name,%s)'),
+                ('bank_accounts', 'starts_with(label,%s)'),
+                ('account_holders', 'user_id IN(SELECT id FROM paylink.users WHERE starts_with(username,%s))'),
+                ('transfers', 'starts_with(memo,%s)')):
+                result.append(c.execute('SELECT md5(string_agg(row_to_json(t)::text,\'\' ORDER BY row_to_json(t)::text)) FROM paylink.'+table+' t WHERE '+predicate, (prefix,)).fetchone()[0])
+            return result
+        assert module.generate(c, .0002, namespace=namespace) == (10,25,20,22,400)
+        first = snapshot()
+        assert all(first)
+        assert c.execute(module.RECONCILE).fetchone()[0] == 0
+        assert c.execute('''SELECT max(n) FROM(SELECT count(*) n FROM paylink.account_holders
+          WHERE user_id IN(SELECT id FROM paylink.users WHERE starts_with(username,%s)) GROUP BY user_id) x''', (prefix,)).fetchone()[0] <= 4
+        assert c.execute('''SELECT count(*) FROM paylink.transfers t WHERE starts_with(memo,%s)
+          AND NOT EXISTS(SELECT 1 FROM paylink.account_holders h WHERE h.user_id=t.initiated_by AND h.account_id=t.source_account_id)''', (prefix,)).fetchone()[0] == 0
+        assert module.generate(c, .0002, reset=True, namespace=namespace) == (10,25,20,22,400)
+        assert snapshot() == first
+        with pytest.raises(errors.UniqueViolation):
+            with c.transaction(): module.generate(c, .0002, namespace=namespace)
+        for scale in (0, -1, float('nan')):
+            with pytest.raises(ValueError): module.generate(c, scale, namespace=namespace)
+        c.rollback()
+        assert c.execute('SELECT count(*) FROM paylink.users WHERE starts_with(username,%s)', (prefix,)).fetchone()[0] == 0
+    for url in ('postgresql://hosted.example/db', 'postgresql://localhost.evil/db', 'postgresql:///db', 'postgresql://localhost/db?hostaddr=8.8.8.8'):
+        with pytest.raises(ValueError, match='localhost'): module.local_url(url)
+    assert module.local_url('postgresql://127.0.0.1:54322/paylink')
 
 @pytest.fixture
 def case():

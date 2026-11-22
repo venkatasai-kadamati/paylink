@@ -1,34 +1,1510 @@
-Database: PostgreSQL 16.15 (Homebrew) on aarch64-apple-darwin25.6.0, compiled by Apple clang version 21.0.0 (clang-2100.1.1.101), 64-bit
-Hosting: local PostgreSQL; hosted Supabase unverified.
-Core row counts (users,banks,accounts,holders,transfers): (4, 3, 6, 7, 7)
-Reconciliation discrepancies: 0
+PostgreSQL 16.16 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+LOCAL ONLY. Single warm-cache runs; planner defaults unchanged. SQL extracted from backend/app/main.py.
+Table: rows, heap_bytes, indexes_bytes, total_bytes (includes TOAST)
+('account_holders', 110007, 15024128, 13819904, 28876800)
+('bank_accounts', 100006, 28188672, 15384576, 43614208)
+('banks', 28, 8192, 32768, 81920)
+('transfers', 2000007, 298139648, 635101184, 933347328)
+('users', 50004, 17293312, 24125440, 41459712)
+Per-index sizes and definitions:
+('account_holders_account_idx', 6529024, 'CREATE INDEX account_holders_account_idx ON paylink.account_holders USING btree (account_id)')
+('account_holders_pkey', 7290880, 'CREATE UNIQUE INDEX account_holders_pkey ON paylink.account_holders USING btree (user_id, account_id)')
+('bank_accounts_bank_id_account_number_key', 9052160, 'CREATE UNIQUE INDEX bank_accounts_bank_id_account_number_key ON paylink.bank_accounts USING btree (bank_id, account_number)')
+('bank_accounts_pkey', 6332416, 'CREATE UNIQUE INDEX bank_accounts_pkey ON paylink.bank_accounts USING btree (id)')
+('banks_pkey', 16384, 'CREATE UNIQUE INDEX banks_pkey ON paylink.banks USING btree (id)')
+('banks_routing_number_key', 16384, 'CREATE UNIQUE INDEX banks_routing_number_key ON paylink.banks USING btree (routing_number)')
+('transfers_created_time_idx', 81027072, 'CREATE INDEX transfers_created_time_idx ON paylink.transfers USING btree (created_at DESC, id DESC)')
+('transfers_destination_time_idx', 164102144, 'CREATE INDEX transfers_destination_time_idx ON paylink.transfers USING btree (destination_account_id, created_at DESC, id DESC)')
+('transfers_initiated_by_idempotency_key_key', 136658944, 'CREATE UNIQUE INDEX transfers_initiated_by_idempotency_key_key ON paylink.transfers USING btree (initiated_by, idempotency_key)')
+('transfers_pkey', 86450176, 'CREATE UNIQUE INDEX transfers_pkey ON paylink.transfers USING btree (id)')
+('transfers_source_time_idx', 166862848, 'CREATE INDEX transfers_source_time_idx ON paylink.transfers USING btree (source_account_id, created_at DESC, id DESC)')
+('users_email_key', 11763712, 'CREATE UNIQUE INDEX users_email_key ON paylink.users USING btree (email)')
+('users_phone_key', 991232, 'CREATE UNIQUE INDEX users_phone_key ON paylink.users USING btree (phone)')
+('users_pkey', 4243456, 'CREATE UNIQUE INDEX users_pkey ON paylink.users USING btree (id)')
+('users_username_key', 7028736, 'CREATE UNIQUE INDEX users_username_key ON paylink.users USING btree (username)')
+('Total paylink bytes including indexes/TOAST', Decimal('1047379968'))
+('Reconciliation discrepancies', 0)
 
-20,000 synthetic transfer rows, transaction-only; not financial history.
-WITH composite source/time index:
-Limit  (cost=0.29..2.11 rows=20 width=32) (actual time=0.004..0.006 rows=20 loops=1)
-  Buffers: shared hit=3
-  ->  Index Scan using transfers_source_time_idx on transfers  (cost=0.29..1825.00 rows=20000 width=32) (actual time=0.004..0.005 rows=20 loops=1)
-        Index Cond: (source_account_id = '310dd6b5-93f6-579c-bfe3-d59acd75b9dc'::uuid)
-        Buffers: shared hit=3
+heavy: id=016c61c4-3c64-5e97-bc35-0dbe82375c80, username=syn_benchmark_241, initiated transfers=840, account=abc32dfd-4a93-5bab-9940-f7d0b68ef3e9
+
+QUERY heavy/login
+SELECT * FROM paylink.users WHERE username=%s OR email=%s
+Parameters: ('syn_benchmark_241', 'syn_benchmark_241')
+WITH relevant=['users_username_key', 'users_email_key'], dropped=[]:
+Bitmap Heap Scan on users  (cost=8.85..16.69 rows=2 width=148) (actual time=0.028..0.028 rows=1 loops=1)
+  Recheck Cond: ((username = 'syn_benchmark_241'::text) OR (email = 'syn_benchmark_241'::text))
+  Heap Blocks: exact=1
+  Buffers: shared hit=4 read=3
+  ->  BitmapOr  (cost=8.85..8.85 rows=2 width=0) (actual time=0.026..0.026 rows=0 loops=1)
+        Buffers: shared hit=3 read=3
+        ->  Bitmap Index Scan on users_username_key  (cost=0.00..4.42 rows=1 width=0) (actual time=0.013..0.013 rows=1 loops=1)
+              Index Cond: (username = 'syn_benchmark_241'::text)
+              Buffers: shared hit=2 read=1
+        ->  Bitmap Index Scan on users_email_key  (cost=0.00..4.42 rows=1 width=0) (actual time=0.012..0.012 rows=0 loops=1)
+              Index Cond: (email = 'syn_benchmark_241'::text)
+              Buffers: shared hit=1 read=2
 Planning:
-  Buffers: shared hit=55
-Planning Time: 0.130 ms
-Execution Time: 0.009 ms
+  Buffers: shared hit=9
+Planning Time: 0.114 ms
+Execution Time: 0.068 ms
+WITHOUT relevant=['users_username_key', 'users_email_key'], dropped=['users_username_key', 'users_email_key']:
+Seq Scan on users  (cost=0.00..2861.21 rows=2 width=148) (actual time=0.587..4.283 rows=1 loops=1)
+  Filter: ((username = 'syn_benchmark_241'::text) OR (email = 'syn_benchmark_241'::text))
+  Rows Removed by Filter: 50003
+  Buffers: shared hit=2111
+Planning:
+  Buffers: shared hit=6
+Planning Time: 0.084 ms
+Execution Time: 4.289 ms
 
-WITHOUT composite source/time index (transactional DROP, rolled back):
-Limit  (cost=1167.28..1167.33 rows=20 width=32) (actual time=1.610..1.611 rows=20 loops=1)
-  Buffers: shared hit=385
-  ->  Sort  (cost=1167.28..1217.28 rows=20000 width=32) (actual time=1.610..1.610 rows=20 loops=1)
-        Sort Key: created_at DESC, id DESC
-        Sort Method: top-N heapsort  Memory: 26kB
-        Buffers: shared hit=385
-        ->  Seq Scan on transfers  (cost=0.00..635.09 rows=20000 width=32) (actual time=0.002..1.007 rows=20000 loops=1)
-              Filter: (source_account_id = '310dd6b5-93f6-579c-bfe3-d59acd75b9dc'::uuid)
-              Rows Removed by Filter: 7
-              Buffers: shared hit=385
+QUERY heavy/ACCOUNT_SQL
+SELECT a.id,a.label,a.account_type,a.balance_cents,a.active,
+    right(a.account_number,4) AS last4,b.name AS bank_name,
+    (SELECT count(*) FROM paylink.account_holders h2 WHERE h2.account_id=a.id) AS holder_count
+    FROM paylink.bank_accounts a JOIN paylink.banks b ON b.id=a.bank_id
+    JOIN paylink.account_holders h ON h.account_id=a.id WHERE h.user_id=%s ORDER BY a.created_at,a.id
+Parameters: (UUID('016c61c4-3c64-5e97-bc35-0dbe82375c80'),)
+WITH relevant=['account_holders_pkey', 'account_holders_account_idx'], dropped=[]:
+Sort  (cost=42.55..42.55 rows=2 width=121) (actual time=0.157..0.159 rows=3 loops=1)
+  Sort Key: a.created_at, a.id
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=29 read=6
+  ->  Nested Loop  (cost=0.97..42.54 rows=2 width=121) (actual time=0.080..0.110 rows=3 loops=1)
+        Buffers: shared hit=26 read=6
+        ->  Nested Loop  (cost=0.83..25.32 rows=2 width=89) (actual time=0.038..0.053 rows=3 loops=1)
+              Buffers: shared hit=13 read=3
+              ->  Index Only Scan using account_holders_pkey on account_holders h  (cost=0.42..8.45 rows=2 width=16) (actual time=0.017..0.017 rows=3 loops=1)
+                    Index Cond: (user_id = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid)
+                    Heap Fetches: 0
+                    Buffers: shared hit=4
+              ->  Index Scan using bank_accounts_pkey on bank_accounts a  (cost=0.42..8.44 rows=1 width=89) (actual time=0.010..0.010 rows=1 loops=3)
+                    Index Cond: (id = h.account_id)
+                    Buffers: shared hit=9 read=3
+        ->  Index Scan using banks_pkey on banks b  (cost=0.14..0.16 rows=1 width=37) (actual time=0.004..0.005 rows=1 loops=3)
+              Index Cond: (id = a.bank_id)
+              Buffers: shared hit=6
+        SubPlan 1
+          ->  Aggregate  (cost=8.44..8.45 rows=1 width=8) (actual time=0.013..0.013 rows=1 loops=3)
+                Buffers: shared hit=7 read=3
+                ->  Index Only Scan using account_holders_account_idx on account_holders h2  (cost=0.42..8.44 rows=1 width=0) (actual time=0.010..0.010 rows=1 loops=3)
+                      Index Cond: (account_id = a.id)
+                      Heap Fetches: 0
+                      Buffers: shared hit=7 read=3
+Planning:
+  Buffers: shared hit=40 read=3
+Planning Time: 0.699 ms
+Execution Time: 0.267 ms
+WITHOUT relevant=['account_holders_pkey', 'account_holders_account_idx'], dropped=['account_holders_pkey', 'account_holders_account_idx']:
+Sort  (cost=9648.12..9648.13 rows=2 width=121) (actual time=23.897..23.900 rows=3 loops=1)
+  Sort Key: a.created_at, a.id
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=5543 read=1806 written=17
+  ->  Nested Loop  (cost=0.42..9648.11 rows=2 width=121) (actual time=15.243..23.871 rows=3 loops=1)
+        Join Filter: (a.bank_id = b.id)
+        Rows Removed by Join Filter: 81
+        Buffers: shared hit=5543 read=1806 written=17
+        ->  Seq Scan on banks b  (cost=0.00..1.53 rows=53 width=37) (actual time=0.006..0.009 rows=28 loops=1)
+              Buffers: shared hit=1
+        ->  Materialize  (cost=0.42..3226.24 rows=2 width=89) (actual time=0.114..0.380 rows=3 loops=28)
+              Buffers: shared hit=40 read=1806 written=17
+              ->  Nested Loop  (cost=0.42..3226.23 rows=2 width=89) (actual time=3.178..10.624 rows=3 loops=1)
+                    Buffers: shared hit=40 read=1806 written=17
+                    ->  Seq Scan on account_holders h  (cost=0.00..3209.36 rows=2 width=16) (actual time=3.152..10.584 rows=3 loops=1)
+                          Filter: (user_id = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid)
+                          Rows Removed by Filter: 110004
+                          Buffers: shared hit=28 read=1806 written=17
+                    ->  Index Scan using bank_accounts_pkey on bank_accounts a  (cost=0.42..8.44 rows=1 width=89) (actual time=0.011..0.011 rows=1 loops=3)
+                          Index Cond: (id = h.account_id)
+                          Buffers: shared hit=12
+        SubPlan 1
+          ->  Aggregate  (cost=3209.37..3209.38 rows=1 width=8) (actual time=4.396..4.396 rows=1 loops=3)
+                Buffers: shared hit=5502
+                ->  Seq Scan on account_holders h2  (cost=0.00..3209.36 rows=1 width=0) (actual time=0.263..4.392 rows=1 loops=3)
+                      Filter: (account_id = a.id)
+                      Rows Removed by Filter: 110006
+                      Buffers: shared hit=5502
+Planning:
+  Buffers: shared hit=14
+Planning Time: 0.321 ms
+Execution Time: 23.999 ms
+
+QUERY heavy/recipients
+SELECT u.id,u.username,u.full_name,a.id AS account_id,b.name AS bank_name,
+          right(a.account_number,4) AS last4, a.account_type,
+          (SELECT count(*) FROM paylink.account_holders h2 WHERE h2.account_id=a.id) AS holder_count
+          FROM paylink.users u
+          JOIN paylink.account_holders h ON h.user_id=u.id JOIN paylink.bank_accounts a ON a.id=h.account_id
+          JOIN paylink.banks b ON b.id=a.bank_id
+          WHERE (u.username=%s OR u.email=%s OR u.phone=%s) AND u.id<>%s AND a.active
+          ORDER BY a.created_at LIMIT 8
+Parameters: ('syn_benchmark_241', 'syn_benchmark_241', 'syn_benchmark_241', UUID('fffac381-deee-5d8a-bfd2-a04c885c7643'))
+WITH relevant=['users_username_key', 'users_email_key', 'users_phone_key'], dropped=[]:
+Limit  (cost=47.62..106.86 rows=7 width=152) (actual time=0.152..0.162 rows=3 loops=1)
+  Buffers: shared hit=40 read=1
+  ->  Result  (cost=47.62..106.86 rows=7 width=152) (actual time=0.151..0.160 rows=3 loops=1)
+        Buffers: shared hit=40 read=1
+        ->  Sort  (cost=47.62..47.64 rows=7 width=144) (actual time=0.124..0.125 rows=3 loops=1)
+              Sort Key: a.created_at
+              Sort Method: quicksort  Memory: 25kB
+              Buffers: shared hit=30 read=1
+              ->  Nested Loop  (cost=14.12..47.52 rows=7 width=144) (actual time=0.102..0.113 rows=3 loops=1)
+                    Buffers: shared hit=30 read=1
+                    ->  Nested Loop  (cost=13.98..46.40 rows=7 width=120) (actual time=0.088..0.096 rows=3 loops=1)
+                          Buffers: shared hit=24 read=1
+                          ->  Nested Loop  (cost=13.56..42.28 rows=7 width=75) (actual time=0.073..0.076 rows=3 loops=1)
+                                Buffers: shared hit=12 read=1
+                                ->  Bitmap Heap Scan on users u  (cost=13.14..24.87 rows=3 width=59) (actual time=0.054..0.055 rows=1 loops=1)
+                                      Recheck Cond: ((username = 'syn_benchmark_241'::text) OR (email = 'syn_benchmark_241'::text) OR (phone = 'syn_benchmark_241'::text))
+                                      Filter: (id <> 'fffac381-deee-5d8a-bfd2-a04c885c7643'::uuid)
+                                      Heap Blocks: exact=1
+                                      Buffers: shared hit=8 read=1
+                                      ->  BitmapOr  (cost=13.14..13.14 rows=3 width=0) (actual time=0.037..0.037 rows=0 loops=1)
+                                            Buffers: shared hit=7 read=1
+                                            ->  Bitmap Index Scan on users_username_key  (cost=0.00..4.42 rows=1 width=0) (actual time=0.008..0.008 rows=1 loops=1)
+                                                  Index Cond: (username = 'syn_benchmark_241'::text)
+                                                  Buffers: shared hit=3
+                                            ->  Bitmap Index Scan on users_email_key  (cost=0.00..4.42 rows=1 width=0) (actual time=0.019..0.019 rows=0 loops=1)
+                                                  Index Cond: (email = 'syn_benchmark_241'::text)
+                                                  Buffers: shared hit=3
+                                            ->  Bitmap Index Scan on users_phone_key  (cost=0.00..4.30 rows=1 width=0) (actual time=0.008..0.008 rows=0 loops=1)
+                                                  Index Cond: (phone = 'syn_benchmark_241'::text)
+                                                  Buffers: shared hit=1 read=1
+                                ->  Index Only Scan using account_holders_pkey on account_holders h  (cost=0.42..5.79 rows=2 width=32) (actual time=0.018..0.018 rows=3 loops=1)
+                                      Index Cond: (user_id = u.id)
+                                      Heap Fetches: 0
+                                      Buffers: shared hit=4
+                          ->  Index Scan using bank_accounts_pkey on bank_accounts a  (cost=0.42..0.59 rows=1 width=61) (actual time=0.006..0.006 rows=1 loops=3)
+                                Index Cond: (id = h.account_id)
+                                Filter: active
+                                Buffers: shared hit=12
+                    ->  Index Scan using banks_pkey on banks b  (cost=0.14..0.16 rows=1 width=37) (actual time=0.004..0.004 rows=1 loops=3)
+                          Index Cond: (id = a.bank_id)
+                          Buffers: shared hit=6
+        SubPlan 1
+          ->  Aggregate  (cost=8.44..8.45 rows=1 width=8) (actual time=0.010..0.010 rows=1 loops=3)
+                Buffers: shared hit=10
+                ->  Index Only Scan using account_holders_account_idx on account_holders h2  (cost=0.42..8.44 rows=1 width=0) (actual time=0.009..0.009 rows=1 loops=3)
+                      Index Cond: (account_id = a.id)
+                      Heap Fetches: 0
+                      Buffers: shared hit=10
+Planning:
+  Buffers: shared hit=102 read=3 written=2
+Planning Time: 1.247 ms
+Execution Time: 0.338 ms
+WITHOUT relevant=['users_username_key', 'users_email_key', 'users_phone_key'], dropped=['users_username_key', 'users_email_key', 'users_phone_key']:
+Limit  (cost=3140.04..3199.28 rows=7 width=152) (actual time=4.767..4.778 rows=3 loops=1)
+  Buffers: shared hit=2138
+  ->  Result  (cost=3140.04..3199.28 rows=7 width=152) (actual time=4.766..4.776 rows=3 loops=1)
+        Buffers: shared hit=2138
+        ->  Sort  (cost=3140.04..3140.06 rows=7 width=144) (actual time=4.727..4.729 rows=3 loops=1)
+              Sort Key: a.created_at
+              Sort Method: quicksort  Memory: 25kB
+              Buffers: shared hit=2128
+              ->  Nested Loop  (cost=0.83..3139.94 rows=7 width=144) (actual time=4.705..4.717 rows=3 loops=1)
+                    Join Filter: (a.bank_id = b.id)
+                    Rows Removed by Join Filter: 81
+                    Buffers: shared hit=2128
+                    ->  Seq Scan on banks b  (cost=0.00..1.53 rows=53 width=37) (actual time=0.004..0.006 rows=28 loops=1)
+                          Buffers: shared hit=1
+                    ->  Materialize  (cost=0.83..3132.85 rows=7 width=120) (actual time=0.020..0.168 rows=3 loops=28)
+                          Buffers: shared hit=2127
+                          ->  Nested Loop  (cost=0.83..3132.81 rows=7 width=120) (actual time=0.551..4.687 rows=3 loops=1)
+                                Buffers: shared hit=2127
+                                ->  Nested Loop  (cost=0.42..3128.70 rows=7 width=75) (actual time=0.536..4.667 rows=3 loops=1)
+                                      Buffers: shared hit=2115
+                                      ->  Seq Scan on users u  (cost=0.00..3111.28 rows=3 width=59) (actual time=0.512..4.641 rows=1 loops=1)
+                                            Filter: ((id <> 'fffac381-deee-5d8a-bfd2-a04c885c7643'::uuid) AND ((username = 'syn_benchmark_241'::text) OR (email = 'syn_benchmark_241'::text) OR (phone = 'syn_benchmark_241'::text)))
+                                            Rows Removed by Filter: 50003
+                                            Buffers: shared hit=2111
+                                      ->  Index Only Scan using account_holders_pkey on account_holders h  (cost=0.42..5.79 rows=2 width=32) (actual time=0.022..0.023 rows=3 loops=1)
+                                            Index Cond: (user_id = u.id)
+                                            Heap Fetches: 0
+                                            Buffers: shared hit=4
+                                ->  Index Scan using bank_accounts_pkey on bank_accounts a  (cost=0.42..0.59 rows=1 width=61) (actual time=0.006..0.006 rows=1 loops=3)
+                                      Index Cond: (id = h.account_id)
+                                      Filter: active
+                                      Buffers: shared hit=12
+        SubPlan 1
+          ->  Aggregate  (cost=8.44..8.45 rows=1 width=8) (actual time=0.014..0.014 rows=1 loops=3)
+                Buffers: shared hit=10
+                ->  Index Only Scan using account_holders_account_idx on account_holders h2  (cost=0.42..8.44 rows=1 width=0) (actual time=0.013..0.013 rows=1 loops=3)
+                      Index Cond: (account_id = a.id)
+                      Heap Fetches: 0
+                      Buffers: shared hit=10
+Planning:
+  Buffers: shared hit=43
+Planning Time: 0.660 ms
+Execution Time: 4.902 ms
+
+QUERY heavy/HISTORY_SQL
+WITH mine AS (SELECT account_id FROM paylink.account_holders WHERE user_id=%s)
+ SELECT t.id,t.amount_cents,t.memo,t.created_at,t.source_account_id,t.destination_account_id,
+ CASE WHEN t.source_account_id IN(SELECT account_id FROM mine) AND t.destination_account_id IN(SELECT account_id FROM mine)
+ THEN 'internal' WHEN t.source_account_id IN(SELECT account_id FROM mine) THEN 'sent' ELSE 'received' END AS direction,
+ s.label AS source_label,d.label AS destination_label,
+ COALESCE((SELECT u.full_name FROM paylink.account_holders h JOIN paylink.users u ON u.id=h.user_id
+ WHERE h.account_id=CASE WHEN t.source_account_id IN(SELECT account_id FROM mine)
+ THEN t.destination_account_id ELSE t.source_account_id END ORDER BY h.joined_at,u.id LIMIT 1),'Account') AS counterparty
+ FROM paylink.transfers t JOIN paylink.bank_accounts s ON s.id=t.source_account_id
+ JOIN paylink.bank_accounts d ON d.id=t.destination_account_id
+ WHERE t.source_account_id IN(SELECT account_id FROM mine) OR t.destination_account_id IN(SELECT account_id FROM mine)
+ ORDER BY t.created_at DESC,t.id DESC LIMIT 200
+Parameters: (UUID('016c61c4-3c64-5e97-bc35-0dbe82375c80'),)
+WITH relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=[]:
+Limit  (cost=9.96..3456.31 rows=200 width=189) (actual time=3.112..274.699 rows=200 loops=1)
+  Buffers: shared hit=282384 read=22804 dirtied=90 written=491
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=0.020..0.021 rows=3 loops=1)
+          Index Cond: (user_id = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=4
+  ->  Nested Loop  (cost=1.51..25851115.54 rows=1500203 width=189) (actual time=3.111..274.665 rows=200 loops=1)
+        Buffers: shared hit=282384 read=22804 dirtied=90 written=491
+        ->  Nested Loop  (cost=0.94..285981.17 rows=1500203 width=106) (actual time=2.974..262.709 rows=200 loops=1)
+              Buffers: shared hit=281087 read=21829 dirtied=90 written=479
+              ->  Index Scan using transfers_created_time_idx on transfers t  (cost=0.52..225143.13 rows=1500203 width=87) (actual time=2.945..262.286 rows=200 loops=1)
+                    Filter: ((hashed SubPlan 7) OR (hashed SubPlan 8))
+                    Rows Removed by Filter: 300912
+                    Buffers: shared hit=281059 read=21817 dirtied=90 written=479
+                    SubPlan 7
+                      ->  CTE Scan on mine mine_4  (cost=0.00..0.04 rows=2 width=16) (actual time=0.021..0.023 rows=3 loops=1)
+                            Buffers: shared hit=4
+                    SubPlan 8
+                      ->  CTE Scan on mine mine_5  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+              ->  Memoize  (cost=0.43..0.46 rows=1 width=35) (actual time=0.001..0.001 rows=1 loops=200)
+                    Cache Key: t.source_account_id
+                    Cache Mode: logical
+                    Hits: 190  Misses: 10  Evictions: 0  Overflows: 0  Memory Usage: 2kB
+                    Buffers: shared hit=28 read=12
+                    ->  Index Scan using bank_accounts_pkey on bank_accounts s  (cost=0.42..0.45 rows=1 width=35) (actual time=0.010..0.010 rows=1 loops=10)
+                          Index Cond: (id = t.source_account_id)
+                          Buffers: shared hit=28 read=12
+        ->  Memoize  (cost=0.43..0.46 rows=1 width=35) (actual time=0.012..0.012 rows=1 loops=200)
+              Cache Key: t.destination_account_id
+              Cache Mode: logical
+              Hits: 4  Misses: 196  Evictions: 0  Overflows: 0  Memory Usage: 29kB
+              Buffers: shared hit=437 read=347 written=6
+              ->  Index Scan using bank_accounts_pkey on bank_accounts d  (cost=0.42..0.45 rows=1 width=35) (actual time=0.010..0.010 rows=1 loops=196)
+                    Index Cond: (id = t.destination_account_id)
+                    Buffers: shared hit=437 read=347 written=6
+        SubPlan 2
+          ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+        SubPlan 3
+          ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.000 rows=3 loops=1)
+        SubPlan 4
+          ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+        SubPlan 6
+          ->  Limit  (cost=16.80..16.81 rows=1 width=48) (actual time=0.046..0.046 rows=1 loops=200)
+                Buffers: shared hit=860 read=628 written=6
+                ->  Sort  (cost=16.80..16.81 rows=1 width=48) (actual time=0.040..0.040 rows=1 loops=200)
+                      Sort Key: h.joined_at, u.id
+                      Sort Method: quicksort  Memory: 25kB
+                      Buffers: shared hit=860 read=628 written=6
+                      ->  Nested Loop  (cost=0.75..16.79 rows=1 width=48) (actual time=0.031..0.033 rows=1 loops=200)
+                            Buffers: shared hit=860 read=628 written=6
+                            ->  Index Scan using account_holders_account_idx on account_holders h  (cost=0.46..8.48 rows=1 width=24) (actual time=0.013..0.014 rows=1 loops=200)
+                                  Index Cond: (account_id = CASE WHEN (hashed SubPlan 5) THEN t.destination_account_id ELSE t.source_account_id END)
+                                  Buffers: shared hit=513 read=309 written=2
+                                  SubPlan 5
+                                    ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+                            ->  Index Scan using users_pkey on users u  (cost=0.29..8.31 rows=1 width=40) (actual time=0.016..0.016 rows=1 loops=222)
+                                  Index Cond: (id = h.user_id)
+                                  Buffers: shared hit=347 read=319 written=4
+Planning:
+  Buffers: shared hit=105 read=7
+Planning Time: 1.065 ms
+Execution Time: 277.350 ms
+WITHOUT_NEW relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=['transfers_created_time_idx']:
+Limit  (cost=255549.92..258914.98 rows=200 width=189) (actual time=457.754..461.402 rows=200 loops=1)
+  Buffers: shared hit=14678 read=26893 written=16, temp read=352 written=352
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=0.152..0.154 rows=3 loops=1)
+          Index Cond: (user_id = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=3 read=1
+  ->  Result  (cost=255541.47..25496937.91 rows=1500203 width=189) (actual time=431.158..434.785 rows=200 loops=1)
+        Buffers: shared hit=14678 read=26893 written=16, temp read=352 written=352
+        ->  Sort  (cost=255541.33..259291.84 rows=1500203 width=157) (actual time=430.581..430.624 rows=200 loops=1)
+              Sort Key: t.created_at DESC, t.id DESC
+              Sort Method: top-N heapsort  Memory: 112kB
+              Buffers: shared hit=13773 read=26310 written=16, temp read=352 written=352
+              ->  Nested Loop  (cost=6474.24..190703.64 rows=1500203 width=157) (actual time=43.943..429.846 rows=1298 loops=1)
+                    Buffers: shared hit=13773 read=26310 written=16, temp read=352 written=352
+                    ->  Hash Join  (cost=6473.68..118613.94 rows=1500203 width=106) (actual time=42.861..426.923 rows=1298 loops=1)
+                          Hash Cond: (t.destination_account_id = d.id)
+                          Buffers: shared hit=13614 read=26225 written=14, temp read=352 written=352
+                          ->  Seq Scan on transfers t  (cost=0.09..66398.15 rows=1500203 width=87) (actual time=0.816..375.334 rows=1298 loops=1)
+                                Filter: ((hashed SubPlan 7) OR (hashed SubPlan 8))
+                                Rows Removed by Filter: 1998709
+                                Buffers: shared hit=13589 read=22809
+                                SubPlan 7
+                                  ->  CTE Scan on mine mine_4  (cost=0.00..0.04 rows=2 width=16) (actual time=0.155..0.158 rows=3 loops=1)
+                                        Buffers: shared hit=3 read=1
+                                SubPlan 8
+                                  ->  CTE Scan on mine mine_5  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+                          ->  Hash  (cost=4441.26..4441.26 rows=100026 width=35) (actual time=41.410..41.411 rows=100006 loops=1)
+                                Buckets: 131072  Batches: 2  Memory Usage: 4326kB
+                                Buffers: shared hit=25 read=3416 written=14, temp written=342
+                                ->  Seq Scan on bank_accounts d  (cost=0.00..4441.26 rows=100026 width=35) (actual time=0.014..21.541 rows=100006 loops=1)
+                                      Buffers: shared hit=25 read=3416 written=14
+                    ->  Memoize  (cost=0.43..0.46 rows=1 width=35) (actual time=0.001..0.001 rows=1 loops=1298)
+                          Cache Key: t.source_account_id
+                          Cache Mode: logical
+                          Hits: 1237  Misses: 61  Evictions: 0  Overflows: 0  Memory Usage: 9kB
+                          Buffers: shared hit=159 read=85 written=2
+                          ->  Index Scan using bank_accounts_pkey on bank_accounts s  (cost=0.42..0.45 rows=1 width=35) (actual time=0.012..0.012 rows=1 loops=61)
+                                Index Cond: (id = t.source_account_id)
+                                Buffers: shared hit=159 read=85 written=2
+                    SubPlan 2
+                      ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.002 rows=3 loops=1)
+                    SubPlan 3
+                      ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+                    SubPlan 4
+                      ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+        SubPlan 6
+          ->  Limit  (cost=16.80..16.81 rows=1 width=48) (actual time=0.020..0.020 rows=1 loops=200)
+                Buffers: shared hit=905 read=583
+                ->  Sort  (cost=16.80..16.81 rows=1 width=48) (actual time=0.020..0.020 rows=1 loops=200)
+                      Sort Key: h.joined_at, u.id
+                      Sort Method: quicksort  Memory: 25kB
+                      Buffers: shared hit=905 read=583
+                      ->  Nested Loop  (cost=0.75..16.79 rows=1 width=48) (actual time=0.017..0.018 rows=1 loops=200)
+                            Buffers: shared hit=905 read=583
+                            ->  Index Scan using account_holders_account_idx on account_holders h  (cost=0.46..8.48 rows=1 width=24) (actual time=0.008..0.008 rows=1 loops=200)
+                                  Index Cond: (account_id = CASE WHEN (hashed SubPlan 5) THEN t.destination_account_id ELSE t.source_account_id END)
+                                  Buffers: shared hit=517 read=305
+                                  SubPlan 5
+                                    ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.002 rows=3 loops=1)
+                            ->  Index Scan using users_pkey on users u  (cost=0.29..8.31 rows=1 width=40) (actual time=0.007..0.007 rows=1 loops=222)
+                                  Index Cond: (id = h.user_id)
+                                  Buffers: shared hit=388 read=278
+Planning:
+  Buffers: shared hit=28 read=25
+Planning Time: 0.816 ms
+JIT:
+  Functions: 100
+  Options: Inlining false, Optimization false, Expressions true, Deforming true
+  Timing: Generation 4.594 ms, Inlining 0.000 ms, Optimization 1.478 ms, Emission 25.824 ms, Total 31.895 ms
+Execution Time: 466.904 ms
+WITHOUT relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx']:
+Limit  (cost=255549.92..258914.98 rows=200 width=189) (actual time=451.780..453.264 rows=200 loops=1)
+  Buffers: shared hit=14852 read=26719 written=1, temp read=352 written=352
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=0.148..0.150 rows=3 loops=1)
+          Index Cond: (user_id = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=3 read=1
+  ->  Result  (cost=255541.47..25496937.91 rows=1500203 width=189) (actual time=425.983..427.448 rows=200 loops=1)
+        Buffers: shared hit=14852 read=26719 written=1, temp read=352 written=352
+        ->  Sort  (cost=255541.33..259291.84 rows=1500203 width=157) (actual time=425.332..425.365 rows=200 loops=1)
+              Sort Key: t.created_at DESC, t.id DESC
+              Sort Method: top-N heapsort  Memory: 112kB
+              Buffers: shared hit=13364 read=26719 written=1, temp read=352 written=352
+              ->  Nested Loop  (cost=6474.24..190703.64 rows=1500203 width=157) (actual time=39.800..424.588 rows=1298 loops=1)
+                    Buffers: shared hit=13364 read=26719 written=1, temp read=352 written=352
+                    ->  Hash Join  (cost=6473.68..118613.94 rows=1500203 width=106) (actual time=38.770..422.151 rows=1298 loops=1)
+                          Hash Cond: (t.destination_account_id = d.id)
+                          Buffers: shared hit=13120 read=26719 written=1, temp read=352 written=352
+                          ->  Seq Scan on transfers t  (cost=0.09..66398.15 rows=1500203 width=87) (actual time=0.798..374.968 rows=1298 loops=1)
+                                Filter: ((hashed SubPlan 7) OR (hashed SubPlan 8))
+                                Rows Removed by Filter: 1998709
+                                Buffers: shared hit=12210 read=24188
+                                SubPlan 7
+                                  ->  CTE Scan on mine mine_4  (cost=0.00..0.04 rows=2 width=16) (actual time=0.150..0.153 rows=3 loops=1)
+                                        Buffers: shared hit=3 read=1
+                                SubPlan 8
+                                  ->  CTE Scan on mine mine_5  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+                          ->  Hash  (cost=4441.26..4441.26 rows=100026 width=35) (actual time=37.331..37.332 rows=100006 loops=1)
+                                Buckets: 131072  Batches: 2  Memory Usage: 4326kB
+                                Buffers: shared hit=910 read=2531 written=1, temp written=342
+                                ->  Seq Scan on bank_accounts d  (cost=0.00..4441.26 rows=100026 width=35) (actual time=0.015..18.003 rows=100006 loops=1)
+                                      Buffers: shared hit=910 read=2531 written=1
+                    ->  Memoize  (cost=0.43..0.46 rows=1 width=35) (actual time=0.000..0.000 rows=1 loops=1298)
+                          Cache Key: t.source_account_id
+                          Cache Mode: logical
+                          Hits: 1237  Misses: 61  Evictions: 0  Overflows: 0  Memory Usage: 9kB
+                          Buffers: shared hit=244
+                          ->  Index Scan using bank_accounts_pkey on bank_accounts s  (cost=0.42..0.45 rows=1 width=35) (actual time=0.005..0.005 rows=1 loops=61)
+                                Index Cond: (id = t.source_account_id)
+                                Buffers: shared hit=244
+                    SubPlan 2
+                      ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.002 rows=3 loops=1)
+                    SubPlan 3
+                      ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+                    SubPlan 4
+                      ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+        SubPlan 6
+          ->  Limit  (cost=16.80..16.81 rows=1 width=48) (actual time=0.010..0.010 rows=1 loops=200)
+                Buffers: shared hit=1488
+                ->  Sort  (cost=16.80..16.81 rows=1 width=48) (actual time=0.009..0.009 rows=1 loops=200)
+                      Sort Key: h.joined_at, u.id
+                      Sort Method: quicksort  Memory: 25kB
+                      Buffers: shared hit=1488
+                      ->  Nested Loop  (cost=0.75..16.79 rows=1 width=48) (actual time=0.008..0.009 rows=1 loops=200)
+                            Buffers: shared hit=1488
+                            ->  Index Scan using account_holders_account_idx on account_holders h  (cost=0.46..8.48 rows=1 width=24) (actual time=0.003..0.003 rows=1 loops=200)
+                                  Index Cond: (account_id = CASE WHEN (hashed SubPlan 5) THEN t.destination_account_id ELSE t.source_account_id END)
+                                  Buffers: shared hit=822
+                                  SubPlan 5
+                                    ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.002 rows=3 loops=1)
+                            ->  Index Scan using users_pkey on users u  (cost=0.29..8.31 rows=1 width=40) (actual time=0.002..0.002 rows=1 loops=222)
+                                  Index Cond: (id = h.user_id)
+                                  Buffers: shared hit=666
+Planning:
+  Buffers: shared hit=26 read=10
+Planning Time: 0.622 ms
+JIT:
+  Functions: 100
+  Options: Inlining false, Optimization false, Expressions true, Deforming true
+  Timing: Generation 4.361 ms, Inlining 0.000 ms, Optimization 1.490 ms, Emission 25.022 ms, Total 30.873 ms
+Execution Time: 458.473 ms
+
+QUERY heavy/insights_monthly
+WITH mine AS(SELECT account_id FROM paylink.account_holders WHERE user_id=%s)
+          SELECT count(*) AS transfer_count,
+          coalesce(sum(amount_cents) FILTER(WHERE source_account_id IN(SELECT account_id FROM mine)
+           AND destination_account_id NOT IN(SELECT account_id FROM mine)),0)::bigint AS sent_cents,
+          coalesce(sum(amount_cents) FILTER(WHERE destination_account_id IN(SELECT account_id FROM mine)
+           AND source_account_id NOT IN(SELECT account_id FROM mine)),0)::bigint AS received_cents
+          FROM paylink.transfers WHERE created_at>=date_trunc('month',now())
+          AND (source_account_id IN(SELECT account_id FROM mine) OR destination_account_id IN(SELECT account_id FROM mine))
+Parameters: (UUID('016c61c4-3c64-5e97-bc35-0dbe82375c80'),)
+WITH relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=[]:
+Aggregate  (cost=43617.09..43617.10 rows=1 width=24) (actual time=81.005..81.009 rows=1 loops=1)
+  Buffers: shared hit=6064 read=9658 written=1
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=0.027..0.029 rows=3 loops=1)
+          Index Cond: (user_id = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=4
+  ->  Bitmap Heap Scan on transfers  (cost=3143.08..42108.47 rows=85713 width=40) (actual time=11.632..80.885 rows=80 loops=1)
+        Recheck Cond: (created_at >= date_trunc('month'::text, now()))
+        Filter: ((hashed SubPlan 6) OR (hashed SubPlan 7))
+        Rows Removed by Filter: 114994
+        Heap Blocks: exact=15148
+        Buffers: shared hit=6064 read=9658 written=1
+        ->  Bitmap Index Scan on transfers_created_time_idx  (cost=0.00..3121.56 rows=114284 width=0) (actual time=9.362..9.362 rows=115074 loops=1)
+              Index Cond: (created_at >= date_trunc('month'::text, now()))
+              Buffers: shared read=570
+        SubPlan 6
+          ->  CTE Scan on mine mine_4  (cost=0.00..0.04 rows=2 width=16) (actual time=0.031..0.032 rows=3 loops=1)
+                Buffers: shared hit=4
+        SubPlan 7
+          ->  CTE Scan on mine mine_5  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+  SubPlan 2
+    ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.000 rows=3 loops=1)
+  SubPlan 3
+    ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.000 rows=3 loops=1)
+  SubPlan 4
+    ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.000 rows=3 loops=1)
+  SubPlan 5
+    ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.001 rows=3 loops=1)
+Planning:
+  Buffers: shared hit=52 read=6
+Planning Time: 0.649 ms
+Execution Time: 81.283 ms
+WITHOUT_NEW relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=['transfers_created_time_idx']:
+Aggregate  (cost=82908.80..82908.82 rows=1 width=24) (actual time=380.889..380.894 rows=1 loops=1)
+  Buffers: shared hit=15178 read=21220
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=0.020..0.021 rows=3 loops=1)
+          Index Cond: (user_id = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=4
+  ->  Seq Scan on transfers  (cost=0.09..81400.19 rows=85713 width=40) (actual time=0.342..380.712 rows=80 loops=1)
+        Filter: (((hashed SubPlan 6) OR (hashed SubPlan 7)) AND (created_at >= date_trunc('month'::text, now())))
+        Rows Removed by Filter: 1999927
+        Buffers: shared hit=15178 read=21220
+        SubPlan 6
+          ->  CTE Scan on mine mine_4  (cost=0.00..0.04 rows=2 width=16) (actual time=0.020..0.022 rows=3 loops=1)
+                Buffers: shared hit=4
+        SubPlan 7
+          ->  CTE Scan on mine mine_5  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+  SubPlan 2
+    ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+  SubPlan 3
+    ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+  SubPlan 4
+    ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.000 rows=3 loops=1)
+  SubPlan 5
+    ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.002 rows=3 loops=1)
 Planning:
   Buffers: shared hit=4
-Planning Time: 0.033 ms
-Execution Time: 1.614 ms
+Planning Time: 0.194 ms
+Execution Time: 381.040 ms
+WITHOUT relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx']:
+Aggregate  (cost=82908.80..82908.82 rows=1 width=24) (actual time=376.512..376.516 rows=1 loops=1)
+  Buffers: shared hit=15210 read=21188
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=0.020..0.021 rows=3 loops=1)
+          Index Cond: (user_id = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=4
+  ->  Seq Scan on transfers  (cost=0.09..81400.19 rows=85713 width=40) (actual time=0.369..376.336 rows=80 loops=1)
+        Filter: (((hashed SubPlan 6) OR (hashed SubPlan 7)) AND (created_at >= date_trunc('month'::text, now())))
+        Rows Removed by Filter: 1999927
+        Buffers: shared hit=15210 read=21188
+        SubPlan 6
+          ->  CTE Scan on mine mine_4  (cost=0.00..0.04 rows=2 width=16) (actual time=0.021..0.022 rows=3 loops=1)
+                Buffers: shared hit=4
+        SubPlan 7
+          ->  CTE Scan on mine mine_5  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+  SubPlan 2
+    ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+  SubPlan 3
+    ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+  SubPlan 4
+    ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=3 loops=1)
+  SubPlan 5
+    ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.001 rows=3 loops=1)
+Planning:
+  Buffers: shared hit=4
+Planning Time: 0.183 ms
+Execution Time: 376.675 ms
 
-Fixture inserts and index drop rolled back. Index restored. No balances changed.
+QUERY heavy/insights_weekly
+WITH days AS(SELECT generate_series(current_date-6,current_date,'1 day')::date AS day),
+          mine AS(SELECT account_id FROM paylink.account_holders WHERE user_id=%s)
+          SELECT days.day,coalesce(sum(t.amount_cents) FILTER(WHERE t.source_account_id IN(SELECT account_id FROM mine)),0)::bigint AS sent,
+          coalesce(sum(t.amount_cents) FILTER(WHERE t.destination_account_id IN(SELECT account_id FROM mine)),0)::bigint AS received
+          FROM days LEFT JOIN paylink.transfers t ON t.created_at>=days.day AND t.created_at<days.day+interval '1 day'
+          AND (t.source_account_id IN(SELECT account_id FROM mine) OR t.destination_account_id IN(SELECT account_id FROM mine))
+          GROUP BY days.day ORDER BY days.day
+Parameters: (UUID('016c61c4-3c64-5e97-bc35-0dbe82375c80'),)
+WITH relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=[]:
+Sort  (cost=9492517.99..9492518.49 rows=200 width=20) (actual time=346.499..346.504 rows=7 loops=1)
+  Sort Key: (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=33072
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=9.733..9.738 rows=3 loops=1)
+          Index Cond: (user_id = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=4
+  ->  HashAggregate  (cost=9492497.89..9492501.89 rows=200 width=20) (actual time=346.458..346.464 rows=7 loops=1)
+        Group Key: (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)
+        Batches: 1  Memory Usage: 40kB
+        Buffers: shared hit=33069
+        ->  Nested Loop Left Join  (cost=0.52..7408882.53 rows=166689222 width=44) (actual time=268.906..315.075 rows=21 loops=1)
+              Buffers: shared hit=33069
+              ->  Result  (cost=0.00..32.53 rows=1000 width=4) (actual time=245.366..245.387 rows=7 loops=1)
+                    ->  ProjectSet  (cost=0.00..5.03 rows=1000 width=8) (actual time=245.363..245.380 rows=7 loops=1)
+                          ->  Result  (cost=0.00..0.01 rows=1 width=0) (actual time=245.344..245.344 rows=1 loops=1)
+              ->  Index Scan using transfers_created_time_idx on transfers t  (cost=0.52..5741.96 rows=166689 width=48) (actual time=3.750..9.949 rows=3 loops=7)
+                    Index Cond: ((created_at >= (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)) AND (created_at < ((((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date) + '1 day'::interval)))
+                    Filter: ((hashed SubPlan 4) OR (hashed SubPlan 5))
+                    Rows Removed by Filter: 4694
+                    Buffers: shared hit=33069
+                    SubPlan 4
+                      ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=9.737..9.744 rows=3 loops=1)
+                            Buffers: shared hit=4
+                    SubPlan 5
+                      ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.002 rows=3 loops=1)
+        SubPlan 2
+          ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.003 rows=3 loops=1)
+        SubPlan 3
+          ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.003 rows=3 loops=1)
+Planning:
+  Buffers: shared hit=149 read=6
+Planning Time: 1.260 ms
+JIT:
+  Functions: 55
+  Options: Inlining true, Optimization true, Expressions true, Deforming true
+  Timing: Generation 2.505 ms, Inlining 74.445 ms, Optimization 133.595 ms, Emission 86.822 ms, Total 297.368 ms
+Execution Time: 348.685 ms
+WITHOUT_NEW relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=['transfers_created_time_idx']:
+Sort  (cost=27313271.99..27313272.49 rows=200 width=20) (actual time=1895.398..1895.403 rows=7 loops=1)
+  Sort Key: (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=6685 read=157145 dirtied=23 written=2
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=25.049..25.056 rows=3 loops=1)
+          Index Cond: (user_id = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=4
+  ->  HashAggregate  (cost=27313251.89..27313255.89 rows=200 width=20) (actual time=1895.380..1895.386 rows=7 loops=1)
+        Group Key: (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)
+        Batches: 1  Memory Usage: 40kB
+        Buffers: shared hit=6685 read=157145 dirtied=23 written=2
+        ->  Nested Loop Left Join  (cost=0.52..25229636.53 rows=166689222 width=44) (actual time=520.192..1854.375 rows=21 loops=1)
+              Buffers: shared hit=6685 read=157145 dirtied=23 written=2
+              ->  Result  (cost=0.00..32.53 rows=1000 width=4) (actual time=231.435..231.469 rows=7 loops=1)
+                    ->  ProjectSet  (cost=0.00..5.03 rows=1000 width=8) (actual time=231.432..231.458 rows=7 loops=1)
+                          ->  Result  (cost=0.00..0.01 rows=1 width=0) (actual time=231.411..231.411 rows=1 loops=1)
+              ->  Index Scan using transfers_destination_time_idx on transfers t  (cost=0.52..23562.71 rows=166689 width=48) (actual time=85.492..231.828 rows=3 loops=7)
+                    Index Cond: ((created_at >= (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)) AND (created_at < ((((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date) + '1 day'::interval)))
+                    Filter: ((hashed SubPlan 4) OR (hashed SubPlan 5))
+                    Rows Removed by Filter: 4694
+                    Buffers: shared hit=6685 read=157145 dirtied=23 written=2
+                    SubPlan 4
+                      ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=25.054..25.064 rows=3 loops=1)
+                            Buffers: shared hit=4
+                    SubPlan 5
+                      ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.004 rows=3 loops=1)
+        SubPlan 2
+          ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.004 rows=3 loops=1)
+        SubPlan 3
+          ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.005 rows=3 loops=1)
+Planning:
+  Buffers: shared hit=6
+Planning Time: 0.267 ms
+JIT:
+  Functions: 55
+  Options: Inlining true, Optimization true, Expressions true, Deforming true
+  Timing: Generation 4.727 ms, Inlining 41.658 ms, Optimization 175.289 ms, Emission 90.187 ms, Total 311.862 ms
+Execution Time: 1899.688 ms
+WITHOUT relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx']:
+Sort  (cost=45343876.65..45343877.15 rows=200 width=20) (actual time=607.754..607.758 rows=7 loops=1)
+  Sort Key: (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=4 read=36394
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=9.887..9.893 rows=3 loops=1)
+          Index Cond: (user_id = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=1 read=3
+  ->  HashAggregate  (cost=45343856.56..45343860.56 rows=200 width=20) (actual time=607.737..607.744 rows=7 loops=1)
+        Group Key: (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)
+        Batches: 1  Memory Usage: 40kB
+        Buffers: shared hit=4 read=36394
+        ->  Nested Loop Left Join  (cost=0.09..43260241.19 rows=166689222 width=44) (actual time=557.118..578.082 rows=21 loops=1)
+              Join Filter: ((t.created_at >= (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)) AND (t.created_at < ((((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date) + '1 day'::interval)))
+              Rows Removed by Join Filter: 9066
+              Buffers: shared hit=4 read=36394
+              ->  Result  (cost=0.00..32.53 rows=1000 width=4) (actual time=193.756..193.766 rows=7 loops=1)
+                    ->  ProjectSet  (cost=0.00..5.03 rows=1000 width=8) (actual time=193.752..193.759 rows=7 loops=1)
+                          ->  Result  (cost=0.00..0.01 rows=1 width=0) (actual time=193.734..193.734 rows=1 loops=1)
+              ->  Materialize  (cost=0.09..87085.17 rows=1500203 width=48) (actual time=2.819..54.801 rows=1298 loops=7)
+                    Buffers: shared hit=4 read=36394
+                    ->  Seq Scan on transfers t  (cost=0.09..66398.15 rows=1500203 width=48) (actual time=19.730..382.782 rows=1298 loops=1)
+                          Filter: ((hashed SubPlan 4) OR (hashed SubPlan 5))
+                          Rows Removed by Filter: 1998709
+                          Buffers: shared hit=4 read=36394
+                          SubPlan 4
+                            ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=9.891..9.897 rows=3 loops=1)
+                                  Buffers: shared hit=1 read=3
+                          SubPlan 5
+                            ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.002 rows=3 loops=1)
+        SubPlan 2
+          ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.003 rows=3 loops=1)
+        SubPlan 3
+          ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.003 rows=3 loops=1)
+Planning:
+  Buffers: shared hit=4 read=2
+Planning Time: 0.239 ms
+JIT:
+  Functions: 55
+  Options: Inlining true, Optimization true, Expressions true, Deforming true
+  Timing: Generation 2.297 ms, Inlining 31.803 ms, Optimization 129.132 ms, Emission 80.960 ms, Total 244.192 ms
+Execution Time: 609.762 ms
+
+QUERY heavy/idempotency
+SELECT * FROM paylink.transfers WHERE initiated_by=%s AND idempotency_key=%s
+Parameters: (UUID('016c61c4-3c64-5e97-bc35-0dbe82375c80'), UUID('ca2dab98-0831-5404-aeb3-4e96c6e3a8b2'))
+WITH relevant=['transfers_initiated_by_idempotency_key_key'], dropped=[]:
+Index Scan using transfers_initiated_by_idempotency_key_key on transfers  (cost=0.43..8.45 rows=1 width=119) (actual time=0.037..0.038 rows=1 loops=1)
+  Index Cond: ((initiated_by = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid) AND (idempotency_key = 'ca2dab98-0831-5404-aeb3-4e96c6e3a8b2'::uuid))
+  Buffers: shared read=4
+Planning:
+  Buffers: shared hit=52 read=3
+Planning Time: 0.466 ms
+Execution Time: 0.056 ms
+WITHOUT relevant=['transfers_initiated_by_idempotency_key_key'], dropped=['transfers_initiated_by_idempotency_key_key']:
+Gather  (cost=1000.00..49895.79 rows=1 width=119) (actual time=81.752..87.399 rows=1 loops=1)
+  Workers Planned: 2
+  Workers Launched: 2
+  Buffers: shared hit=36 read=36358
+  ->  Parallel Seq Scan on transfers  (cost=0.00..48895.69 rows=1 width=119) (actual time=56.096..67.210 rows=0 loops=3)
+        Filter: ((initiated_by = '016c61c4-3c64-5e97-bc35-0dbe82375c80'::uuid) AND (idempotency_key = 'ca2dab98-0831-5404-aeb3-4e96c6e3a8b2'::uuid))
+        Rows Removed by Filter: 666669
+        Buffers: shared hit=36 read=36358
+Planning:
+  Buffers: shared hit=4
+Planning Time: 0.115 ms
+Execution Time: 87.412 ms
+
+QUERY heavy/holder_count
+SELECT count(*) FROM paylink.account_holders h2 WHERE h2.account_id=%s
+Parameters: (UUID('abc32dfd-4a93-5bab-9940-f7d0b68ef3e9'),)
+WITH relevant=['account_holders_account_idx'], dropped=[]:
+Aggregate  (cost=8.44..8.45 rows=1 width=8) (actual time=0.055..0.055 rows=1 loops=1)
+  Buffers: shared hit=1 read=3
+  ->  Index Only Scan using account_holders_account_idx on account_holders h2  (cost=0.42..8.44 rows=1 width=0) (actual time=0.049..0.050 rows=1 loops=1)
+        Index Cond: (account_id = 'abc32dfd-4a93-5bab-9940-f7d0b68ef3e9'::uuid)
+        Heap Fetches: 0
+        Buffers: shared hit=1 read=3
+Planning Time: 0.064 ms
+Execution Time: 0.080 ms
+WITHOUT relevant=['account_holders_account_idx'], dropped=['account_holders_account_idx']:
+Aggregate  (cost=3209.37..3209.38 rows=1 width=8) (actual time=10.035..10.036 rows=1 loops=1)
+  Buffers: shared read=1834
+  ->  Seq Scan on account_holders h2  (cost=0.00..3209.36 rows=1 width=0) (actual time=3.298..10.030 rows=1 loops=1)
+        Filter: (account_id = 'abc32dfd-4a93-5bab-9940-f7d0b68ef3e9'::uuid)
+        Rows Removed by Filter: 110006
+        Buffers: shared read=1834
+Planning:
+  Buffers: shared hit=4
+Planning Time: 0.090 ms
+Execution Time: 10.047 ms
+
+typical: id=d36f0d78-1ac3-54d5-aebb-85eadb50d334, username=syn_benchmark_42829, initiated transfers=40, account=81198019-8fc7-5dbd-9b4c-d52f782acb1f
+
+QUERY typical/login
+SELECT * FROM paylink.users WHERE username=%s OR email=%s
+Parameters: ('syn_benchmark_42829', 'syn_benchmark_42829')
+WITH relevant=['users_username_key', 'users_email_key'], dropped=[]:
+Bitmap Heap Scan on users  (cost=8.85..16.69 rows=2 width=148) (actual time=0.055..0.056 rows=1 loops=1)
+  Recheck Cond: ((username = 'syn_benchmark_42829'::text) OR (email = 'syn_benchmark_42829'::text))
+  Heap Blocks: exact=1
+  Buffers: shared read=7
+  ->  BitmapOr  (cost=8.85..8.85 rows=2 width=0) (actual time=0.049..0.049 rows=0 loops=1)
+        Buffers: shared read=6
+        ->  Bitmap Index Scan on users_username_key  (cost=0.00..4.42 rows=1 width=0) (actual time=0.032..0.032 rows=1 loops=1)
+              Index Cond: (username = 'syn_benchmark_42829'::text)
+              Buffers: shared read=3
+        ->  Bitmap Index Scan on users_email_key  (cost=0.00..4.42 rows=1 width=0) (actual time=0.017..0.017 rows=0 loops=1)
+              Index Cond: (email = 'syn_benchmark_42829'::text)
+              Buffers: shared read=3
+Planning Time: 0.057 ms
+Execution Time: 0.110 ms
+WITHOUT relevant=['users_username_key', 'users_email_key'], dropped=['users_username_key', 'users_email_key']:
+Seq Scan on users  (cost=0.00..2861.21 rows=2 width=148) (actual time=9.955..10.996 rows=1 loops=1)
+  Filter: ((username = 'syn_benchmark_42829'::text) OR (email = 'syn_benchmark_42829'::text))
+  Rows Removed by Filter: 50003
+  Buffers: shared hit=1 read=2110
+Planning:
+  Buffers: shared hit=6
+Planning Time: 0.112 ms
+Execution Time: 11.005 ms
+
+QUERY typical/ACCOUNT_SQL
+SELECT a.id,a.label,a.account_type,a.balance_cents,a.active,
+    right(a.account_number,4) AS last4,b.name AS bank_name,
+    (SELECT count(*) FROM paylink.account_holders h2 WHERE h2.account_id=a.id) AS holder_count
+    FROM paylink.bank_accounts a JOIN paylink.banks b ON b.id=a.bank_id
+    JOIN paylink.account_holders h ON h.account_id=a.id WHERE h.user_id=%s ORDER BY a.created_at,a.id
+Parameters: (UUID('d36f0d78-1ac3-54d5-aebb-85eadb50d334'),)
+WITH relevant=['account_holders_pkey', 'account_holders_account_idx'], dropped=[]:
+Sort  (cost=42.55..42.55 rows=2 width=121) (actual time=0.129..0.130 rows=2 loops=1)
+  Sort Key: a.created_at, a.id
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=15 read=8
+  ->  Nested Loop  (cost=0.97..42.54 rows=2 width=121) (actual time=0.099..0.114 rows=2 loops=1)
+        Buffers: shared hit=15 read=8
+        ->  Nested Loop  (cost=0.83..25.32 rows=2 width=89) (actual time=0.042..0.049 rows=2 loops=1)
+              Buffers: shared hit=8 read=4
+              ->  Index Only Scan using account_holders_pkey on account_holders h  (cost=0.42..8.45 rows=2 width=16) (actual time=0.015..0.016 rows=2 loops=1)
+                    Index Cond: (user_id = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid)
+                    Heap Fetches: 0
+                    Buffers: shared hit=4
+              ->  Index Scan using bank_accounts_pkey on bank_accounts a  (cost=0.42..8.44 rows=1 width=89) (actual time=0.015..0.015 rows=1 loops=2)
+                    Index Cond: (id = h.account_id)
+                    Buffers: shared hit=4 read=4
+        ->  Index Scan using banks_pkey on banks b  (cost=0.14..0.16 rows=1 width=37) (actual time=0.016..0.016 rows=1 loops=2)
+              Index Cond: (id = a.bank_id)
+              Buffers: shared hit=2 read=2
+        SubPlan 1
+          ->  Aggregate  (cost=8.44..8.45 rows=1 width=8) (actual time=0.014..0.014 rows=1 loops=2)
+                Buffers: shared hit=5 read=2
+                ->  Index Only Scan using account_holders_account_idx on account_holders h2  (cost=0.42..8.44 rows=1 width=0) (actual time=0.011..0.012 rows=1 loops=2)
+                      Index Cond: (account_id = a.id)
+                      Heap Fetches: 0
+                      Buffers: shared hit=5 read=2
+Planning:
+  Buffers: shared hit=8 read=10
+Planning Time: 0.447 ms
+Execution Time: 0.211 ms
+WITHOUT relevant=['account_holders_pkey', 'account_holders_account_idx'], dropped=['account_holders_pkey', 'account_holders_account_idx']:
+Sort  (cost=9648.12..9648.13 rows=2 width=121) (actual time=18.192..18.195 rows=2 loops=1)
+  Sort Key: a.created_at, a.id
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=5511
+  ->  Nested Loop  (cost=0.42..9648.11 rows=2 width=121) (actual time=13.779..18.181 rows=2 loops=1)
+        Join Filter: (a.bank_id = b.id)
+        Rows Removed by Join Filter: 54
+        Buffers: shared hit=5511
+        ->  Seq Scan on banks b  (cost=0.00..1.53 rows=53 width=37) (actual time=0.003..0.006 rows=28 loops=1)
+              Buffers: shared hit=1
+        ->  Materialize  (cost=0.42..3226.24 rows=2 width=89) (actual time=0.294..0.327 rows=2 loops=28)
+              Buffers: shared hit=1842
+              ->  Nested Loop  (cost=0.42..3226.23 rows=2 width=89) (actual time=8.219..9.146 rows=2 loops=1)
+                    Buffers: shared hit=1842
+                    ->  Seq Scan on account_holders h  (cost=0.00..3209.36 rows=2 width=16) (actual time=8.188..9.112 rows=2 loops=1)
+                          Filter: (user_id = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid)
+                          Rows Removed by Filter: 110005
+                          Buffers: shared hit=1834
+                    ->  Index Scan using bank_accounts_pkey on bank_accounts a  (cost=0.42..8.44 rows=1 width=89) (actual time=0.014..0.014 rows=1 loops=2)
+                          Index Cond: (id = h.account_id)
+                          Buffers: shared hit=8
+        SubPlan 1
+          ->  Aggregate  (cost=3209.37..3209.38 rows=1 width=8) (actual time=4.499..4.499 rows=1 loops=2)
+                Buffers: shared hit=3668
+                ->  Seq Scan on account_holders h2  (cost=0.00..3209.36 rows=1 width=0) (actual time=3.583..4.495 rows=1 loops=2)
+                      Filter: (account_id = a.id)
+                      Rows Removed by Filter: 110006
+                      Buffers: shared hit=3668
+Planning:
+  Buffers: shared hit=14
+Planning Time: 0.278 ms
+Execution Time: 18.268 ms
+
+QUERY typical/recipients
+SELECT u.id,u.username,u.full_name,a.id AS account_id,b.name AS bank_name,
+          right(a.account_number,4) AS last4, a.account_type,
+          (SELECT count(*) FROM paylink.account_holders h2 WHERE h2.account_id=a.id) AS holder_count
+          FROM paylink.users u
+          JOIN paylink.account_holders h ON h.user_id=u.id JOIN paylink.bank_accounts a ON a.id=h.account_id
+          JOIN paylink.banks b ON b.id=a.bank_id
+          WHERE (u.username=%s OR u.email=%s OR u.phone=%s) AND u.id<>%s AND a.active
+          ORDER BY a.created_at LIMIT 8
+Parameters: ('syn_benchmark_42829', 'syn_benchmark_42829', 'syn_benchmark_42829', UUID('fffac381-deee-5d8a-bfd2-a04c885c7643'))
+WITH relevant=['users_username_key', 'users_email_key', 'users_phone_key'], dropped=[]:
+Limit  (cost=47.62..106.86 rows=7 width=152) (actual time=0.125..0.131 rows=2 loops=1)
+  Buffers: shared hit=30 read=2
+  ->  Result  (cost=47.62..106.86 rows=7 width=152) (actual time=0.124..0.130 rows=2 loops=1)
+        Buffers: shared hit=30 read=2
+        ->  Sort  (cost=47.62..47.64 rows=7 width=144) (actual time=0.107..0.109 rows=2 loops=1)
+              Sort Key: a.created_at
+              Sort Method: quicksort  Memory: 25kB
+              Buffers: shared hit=23 read=2
+              ->  Nested Loop  (cost=14.12..47.52 rows=7 width=144) (actual time=0.088..0.095 rows=2 loops=1)
+                    Buffers: shared hit=23 read=2
+                    ->  Nested Loop  (cost=13.98..46.40 rows=7 width=120) (actual time=0.074..0.079 rows=2 loops=1)
+                          Buffers: shared hit=19 read=2
+                          ->  Nested Loop  (cost=13.56..42.28 rows=7 width=75) (actual time=0.058..0.060 rows=2 loops=1)
+                                Buffers: shared hit=11 read=2
+                                ->  Bitmap Heap Scan on users u  (cost=13.14..24.87 rows=3 width=59) (actual time=0.039..0.039 rows=1 loops=1)
+                                      Recheck Cond: ((username = 'syn_benchmark_42829'::text) OR (email = 'syn_benchmark_42829'::text) OR (phone = 'syn_benchmark_42829'::text))
+                                      Filter: (id <> 'fffac381-deee-5d8a-bfd2-a04c885c7643'::uuid)
+                                      Heap Blocks: exact=1
+                                      Buffers: shared hit=7 read=2
+                                      ->  BitmapOr  (cost=13.14..13.14 rows=3 width=0) (actual time=0.033..0.033 rows=0 loops=1)
+                                            Buffers: shared hit=6 read=2
+                                            ->  Bitmap Index Scan on users_username_key  (cost=0.00..4.42 rows=1 width=0) (actual time=0.009..0.009 rows=1 loops=1)
+                                                  Index Cond: (username = 'syn_benchmark_42829'::text)
+                                                  Buffers: shared hit=3
+                                            ->  Bitmap Index Scan on users_email_key  (cost=0.00..4.42 rows=1 width=0) (actual time=0.005..0.005 rows=0 loops=1)
+                                                  Index Cond: (email = 'syn_benchmark_42829'::text)
+                                                  Buffers: shared hit=3
+                                            ->  Bitmap Index Scan on users_phone_key  (cost=0.00..4.30 rows=1 width=0) (actual time=0.019..0.019 rows=0 loops=1)
+                                                  Index Cond: (phone = 'syn_benchmark_42829'::text)
+                                                  Buffers: shared read=2
+                                ->  Index Only Scan using account_holders_pkey on account_holders h  (cost=0.42..5.79 rows=2 width=32) (actual time=0.018..0.018 rows=2 loops=1)
+                                      Index Cond: (user_id = u.id)
+                                      Heap Fetches: 0
+                                      Buffers: shared hit=4
+                          ->  Index Scan using bank_accounts_pkey on bank_accounts a  (cost=0.42..0.59 rows=1 width=61) (actual time=0.009..0.009 rows=1 loops=2)
+                                Index Cond: (id = h.account_id)
+                                Filter: active
+                                Buffers: shared hit=8
+                    ->  Index Scan using banks_pkey on banks b  (cost=0.14..0.16 rows=1 width=37) (actual time=0.007..0.007 rows=1 loops=2)
+                          Index Cond: (id = a.bank_id)
+                          Buffers: shared hit=4
+        SubPlan 1
+          ->  Aggregate  (cost=8.44..8.45 rows=1 width=8) (actual time=0.009..0.009 rows=1 loops=2)
+                Buffers: shared hit=7
+                ->  Index Only Scan using account_holders_account_idx on account_holders h2  (cost=0.42..8.44 rows=1 width=0) (actual time=0.007..0.007 rows=1 loops=2)
+                      Index Cond: (account_id = a.id)
+                      Heap Fetches: 0
+                      Buffers: shared hit=7
+Planning:
+  Buffers: shared hit=91 read=9
+Planning Time: 1.098 ms
+Execution Time: 0.309 ms
+WITHOUT relevant=['users_username_key', 'users_email_key', 'users_phone_key'], dropped=['users_username_key', 'users_email_key', 'users_phone_key']:
+Limit  (cost=3140.04..3199.28 rows=7 width=152) (actual time=5.164..5.178 rows=2 loops=1)
+  Buffers: shared hit=2131
+  ->  Result  (cost=3140.04..3199.28 rows=7 width=152) (actual time=5.163..5.177 rows=2 loops=1)
+        Buffers: shared hit=2131
+        ->  Sort  (cost=3140.04..3140.06 rows=7 width=144) (actual time=5.138..5.139 rows=2 loops=1)
+              Sort Key: a.created_at
+              Sort Method: quicksort  Memory: 25kB
+              Buffers: shared hit=2124
+              ->  Nested Loop  (cost=0.83..3139.94 rows=7 width=144) (actual time=5.119..5.128 rows=2 loops=1)
+                    Join Filter: (a.bank_id = b.id)
+                    Rows Removed by Join Filter: 54
+                    Buffers: shared hit=2124
+                    ->  Seq Scan on banks b  (cost=0.00..1.53 rows=53 width=37) (actual time=0.004..0.006 rows=28 loops=1)
+                          Buffers: shared hit=1
+                    ->  Materialize  (cost=0.83..3132.85 rows=7 width=120) (actual time=0.156..0.183 rows=2 loops=28)
+                          Buffers: shared hit=2123
+                          ->  Nested Loop  (cost=0.83..3132.81 rows=7 width=120) (actual time=4.377..5.104 rows=2 loops=1)
+                                Buffers: shared hit=2123
+                                ->  Nested Loop  (cost=0.42..3128.70 rows=7 width=75) (actual time=4.358..5.081 rows=2 loops=1)
+                                      Buffers: shared hit=2115
+                                      ->  Seq Scan on users u  (cost=0.00..3111.28 rows=3 width=59) (actual time=4.334..5.056 rows=1 loops=1)
+                                            Filter: ((id <> 'fffac381-deee-5d8a-bfd2-a04c885c7643'::uuid) AND ((username = 'syn_benchmark_42829'::text) OR (email = 'syn_benchmark_42829'::text) OR (phone = 'syn_benchmark_42829'::text)))
+                                            Rows Removed by Filter: 50003
+                                            Buffers: shared hit=2111
+                                      ->  Index Only Scan using account_holders_pkey on account_holders h  (cost=0.42..5.79 rows=2 width=32) (actual time=0.022..0.022 rows=2 loops=1)
+                                            Index Cond: (user_id = u.id)
+                                            Heap Fetches: 0
+                                            Buffers: shared hit=4
+                                ->  Index Scan using bank_accounts_pkey on bank_accounts a  (cost=0.42..0.59 rows=1 width=61) (actual time=0.010..0.010 rows=1 loops=2)
+                                      Index Cond: (id = h.account_id)
+                                      Filter: active
+                                      Buffers: shared hit=8
+        SubPlan 1
+          ->  Aggregate  (cost=8.44..8.45 rows=1 width=8) (actual time=0.017..0.017 rows=1 loops=2)
+                Buffers: shared hit=7
+                ->  Index Only Scan using account_holders_account_idx on account_holders h2  (cost=0.42..8.44 rows=1 width=0) (actual time=0.011..0.011 rows=1 loops=2)
+                      Index Cond: (account_id = a.id)
+                      Heap Fetches: 0
+                      Buffers: shared hit=7
+Planning:
+  Buffers: shared hit=43
+Planning Time: 0.609 ms
+Execution Time: 5.276 ms
+
+QUERY typical/HISTORY_SQL
+WITH mine AS (SELECT account_id FROM paylink.account_holders WHERE user_id=%s)
+ SELECT t.id,t.amount_cents,t.memo,t.created_at,t.source_account_id,t.destination_account_id,
+ CASE WHEN t.source_account_id IN(SELECT account_id FROM mine) AND t.destination_account_id IN(SELECT account_id FROM mine)
+ THEN 'internal' WHEN t.source_account_id IN(SELECT account_id FROM mine) THEN 'sent' ELSE 'received' END AS direction,
+ s.label AS source_label,d.label AS destination_label,
+ COALESCE((SELECT u.full_name FROM paylink.account_holders h JOIN paylink.users u ON u.id=h.user_id
+ WHERE h.account_id=CASE WHEN t.source_account_id IN(SELECT account_id FROM mine)
+ THEN t.destination_account_id ELSE t.source_account_id END ORDER BY h.joined_at,u.id LIMIT 1),'Account') AS counterparty
+ FROM paylink.transfers t JOIN paylink.bank_accounts s ON s.id=t.source_account_id
+ JOIN paylink.bank_accounts d ON d.id=t.destination_account_id
+ WHERE t.source_account_id IN(SELECT account_id FROM mine) OR t.destination_account_id IN(SELECT account_id FROM mine)
+ ORDER BY t.created_at DESC,t.id DESC LIMIT 200
+Parameters: (UUID('d36f0d78-1ac3-54d5-aebb-85eadb50d334'),)
+WITH relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=[]:
+Limit  (cost=9.96..3456.31 rows=200 width=189) (actual time=66.234..1367.327 rows=81 loops=1)
+  Buffers: shared hit=1950826 read=60894 dirtied=310 written=289
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=0.015..0.016 rows=2 loops=1)
+          Index Cond: (user_id = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=4
+  ->  Nested Loop  (cost=1.51..25851115.54 rows=1500203 width=189) (actual time=66.233..1367.289 rows=81 loops=1)
+        Buffers: shared hit=1950826 read=60894 dirtied=310 written=289
+        ->  Nested Loop  (cost=0.94..285981.17 rows=1500203 width=106) (actual time=66.121..1359.861 rows=81 loops=1)
+              Buffers: shared hit=1950537 read=60432 dirtied=310 written=284
+              ->  Index Scan using transfers_created_time_idx on transfers t  (cost=0.52..225143.13 rows=1500203 width=87) (actual time=66.040..1358.497 rows=81 loops=1)
+                    Filter: ((hashed SubPlan 7) OR (hashed SubPlan 8))
+                    Rows Removed by Filter: 1999926
+                    Buffers: shared hit=1950462 read=60335 dirtied=310 written=283
+                    SubPlan 7
+                      ->  CTE Scan on mine mine_4  (cost=0.00..0.04 rows=2 width=16) (actual time=0.016..0.018 rows=2 loops=1)
+                            Buffers: shared hit=4
+                    SubPlan 8
+                      ->  CTE Scan on mine mine_5  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=2 loops=1)
+              ->  Memoize  (cost=0.43..0.46 rows=1 width=35) (actual time=0.013..0.013 rows=1 loops=81)
+                    Cache Key: t.source_account_id
+                    Cache Mode: logical
+                    Hits: 38  Misses: 43  Evictions: 0  Overflows: 0  Memory Usage: 7kB
+                    Buffers: shared hit=75 read=97 written=1
+                    ->  Index Scan using bank_accounts_pkey on bank_accounts s  (cost=0.42..0.45 rows=1 width=35) (actual time=0.018..0.018 rows=1 loops=43)
+                          Index Cond: (id = t.source_account_id)
+                          Buffers: shared hit=75 read=97 written=1
+        ->  Memoize  (cost=0.43..0.46 rows=1 width=35) (actual time=0.010..0.010 rows=1 loops=81)
+              Cache Key: t.destination_account_id
+              Cache Mode: logical
+              Hits: 39  Misses: 42  Evictions: 0  Overflows: 0  Memory Usage: 7kB
+              Buffers: shared hit=69 read=99
+              ->  Index Scan using bank_accounts_pkey on bank_accounts d  (cost=0.42..0.45 rows=1 width=35) (actual time=0.016..0.016 rows=1 loops=42)
+                    Index Cond: (id = t.destination_account_id)
+                    Buffers: shared hit=69 read=99
+        SubPlan 2
+          ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.002 rows=2 loops=1)
+        SubPlan 3
+          ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.001 rows=2 loops=1)
+        SubPlan 4
+          ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.000 rows=2 loops=1)
+        SubPlan 6
+          ->  Limit  (cost=16.80..16.81 rows=1 width=48) (actual time=0.075..0.075 rows=1 loops=81)
+                Buffers: shared hit=220 read=363 written=5
+                ->  Sort  (cost=16.80..16.81 rows=1 width=48) (actual time=0.054..0.054 rows=1 loops=81)
+                      Sort Key: h.joined_at, u.id
+                      Sort Method: quicksort  Memory: 25kB
+                      Buffers: shared hit=220 read=363 written=5
+                      ->  Nested Loop  (cost=0.75..16.79 rows=1 width=48) (actual time=0.031..0.032 rows=1 loops=81)
+                            Buffers: shared hit=220 read=363 written=5
+                            ->  Index Scan using account_holders_account_idx on account_holders h  (cost=0.46..8.48 rows=1 width=24) (actual time=0.015..0.015 rows=1 loops=81)
+                                  Index Cond: (account_id = CASE WHEN (hashed SubPlan 5) THEN t.destination_account_id ELSE t.source_account_id END)
+                                  Buffers: shared hit=130 read=198 written=2
+                                  SubPlan 5
+                                    ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.000 rows=2 loops=1)
+                            ->  Index Scan using users_pkey on users u  (cost=0.29..8.31 rows=1 width=40) (actual time=0.012..0.012 rows=1 loops=85)
+                                  Index Cond: (id = h.user_id)
+                                  Buffers: shared hit=90 read=165 written=3
+Planning:
+  Buffers: shared hit=86 read=12
+Planning Time: 0.952 ms
+Execution Time: 1369.912 ms
+WITHOUT_NEW relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=['transfers_created_time_idx']:
+Limit  (cost=255549.92..258914.98 rows=200 width=189) (actual time=422.662..424.180 rows=81 loops=1)
+  Buffers: shared hit=14067 read=26527 written=17, temp read=344 written=344
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=0.144..0.146 rows=2 loops=1)
+          Index Cond: (user_id = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=3 read=1
+  ->  Result  (cost=255541.47..25496937.91 rows=1500203 width=189) (actual time=399.021..400.528 rows=81 loops=1)
+        Buffers: shared hit=14067 read=26527 written=17, temp read=344 written=344
+        ->  Sort  (cost=255541.33..259291.84 rows=1500203 width=157) (actual time=398.419..398.434 rows=81 loops=1)
+              Sort Key: t.created_at DESC, t.id DESC
+              Sort Method: quicksort  Memory: 45kB
+              Buffers: shared hit=13743 read=26268 written=17, temp read=344 written=344
+              ->  Nested Loop  (cost=6474.24..190703.64 rows=1500203 width=157) (actual time=48.502..398.346 rows=81 loops=1)
+                    Buffers: shared hit=13743 read=26268 written=17, temp read=344 written=344
+                    ->  Hash Join  (cost=6473.68..118613.94 rows=1500203 width=106) (actual time=46.753..396.113 rows=81 loops=1)
+                          Hash Cond: (t.destination_account_id = d.id)
+                          Buffers: shared hit=13627 read=26212 written=17, temp read=344 written=344
+                          ->  Seq Scan on transfers t  (cost=0.09..66398.15 rows=1500203 width=87) (actual time=2.674..345.115 rows=81 loops=1)
+                                Filter: ((hashed SubPlan 7) OR (hashed SubPlan 8))
+                                Rows Removed by Filter: 1999926
+                                Buffers: shared hit=13625 read=22773 written=1
+                                SubPlan 7
+                                  ->  CTE Scan on mine mine_4  (cost=0.00..0.04 rows=2 width=16) (actual time=0.146..0.148 rows=2 loops=1)
+                                        Buffers: shared hit=3 read=1
+                                SubPlan 8
+                                  ->  CTE Scan on mine mine_5  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=2 loops=1)
+                          ->  Hash  (cost=4441.26..4441.26 rows=100026 width=35) (actual time=41.768..41.768 rows=100006 loops=1)
+                                Buckets: 131072  Batches: 2  Memory Usage: 4326kB
+                                Buffers: shared hit=2 read=3439 written=16, temp written=342
+                                ->  Seq Scan on bank_accounts d  (cost=0.00..4441.26 rows=100026 width=35) (actual time=0.018..21.866 rows=100006 loops=1)
+                                      Buffers: shared hit=2 read=3439 written=16
+                    ->  Memoize  (cost=0.43..0.46 rows=1 width=35) (actual time=0.006..0.006 rows=1 loops=81)
+                          Cache Key: t.source_account_id
+                          Cache Mode: logical
+                          Hits: 38  Misses: 43  Evictions: 0  Overflows: 0  Memory Usage: 7kB
+                          Buffers: shared hit=116 read=56
+                          ->  Index Scan using bank_accounts_pkey on bank_accounts s  (cost=0.42..0.45 rows=1 width=35) (actual time=0.010..0.010 rows=1 loops=43)
+                                Index Cond: (id = t.source_account_id)
+                                Buffers: shared hit=116 read=56
+                    SubPlan 2
+                      ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.001 rows=2 loops=1)
+                    SubPlan 3
+                      ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.001 rows=2 loops=1)
+                    SubPlan 4
+                      ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=2 loops=1)
+        SubPlan 6
+          ->  Limit  (cost=16.80..16.81 rows=1 width=48) (actual time=0.025..0.025 rows=1 loops=81)
+                Buffers: shared hit=324 read=259
+                ->  Sort  (cost=16.80..16.81 rows=1 width=48) (actual time=0.024..0.024 rows=1 loops=81)
+                      Sort Key: h.joined_at, u.id
+                      Sort Method: quicksort  Memory: 25kB
+                      Buffers: shared hit=324 read=259
+                      ->  Nested Loop  (cost=0.75..16.79 rows=1 width=48) (actual time=0.022..0.023 rows=1 loops=81)
+                            Buffers: shared hit=324 read=259
+                            ->  Index Scan using account_holders_account_idx on account_holders h  (cost=0.46..8.48 rows=1 width=24) (actual time=0.008..0.009 rows=1 loops=81)
+                                  Index Cond: (account_id = CASE WHEN (hashed SubPlan 5) THEN t.destination_account_id ELSE t.source_account_id END)
+                                  Buffers: shared hit=194 read=134
+                                  SubPlan 5
+                                    ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.002 rows=2 loops=1)
+                            ->  Index Scan using users_pkey on users u  (cost=0.29..8.31 rows=1 width=40) (actual time=0.008..0.008 rows=1 loops=85)
+                                  Index Cond: (id = h.user_id)
+                                  Buffers: shared hit=130 read=125
+Planning:
+  Buffers: shared hit=29 read=24
+Planning Time: 0.871 ms
+JIT:
+  Functions: 100
+  Options: Inlining false, Optimization false, Expressions true, Deforming true
+  Timing: Generation 4.946 ms, Inlining 0.000 ms, Optimization 1.392 ms, Emission 22.969 ms, Total 29.307 ms
+Execution Time: 429.570 ms
+WITHOUT relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx']:
+Limit  (cost=255549.92..258914.98 rows=200 width=189) (actual time=431.269..431.944 rows=81 loops=1)
+  Buffers: shared hit=14588 read=26006, temp read=344 written=344
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=0.135..0.137 rows=2 loops=1)
+          Index Cond: (user_id = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=3 read=1
+  ->  Result  (cost=255541.47..25496937.91 rows=1500203 width=189) (actual time=403.350..404.015 rows=81 loops=1)
+        Buffers: shared hit=14588 read=26006, temp read=344 written=344
+        ->  Sort  (cost=255541.33..259291.84 rows=1500203 width=157) (actual time=402.817..402.832 rows=81 loops=1)
+              Sort Key: t.created_at DESC, t.id DESC
+              Sort Method: quicksort  Memory: 45kB
+              Buffers: shared hit=14005 read=26006, temp read=344 written=344
+              ->  Nested Loop  (cost=6474.24..190703.64 rows=1500203 width=157) (actual time=42.465..402.758 rows=81 loops=1)
+                    Buffers: shared hit=14005 read=26006, temp read=344 written=344
+                    ->  Hash Join  (cost=6473.68..118613.94 rows=1500203 width=106) (actual time=41.505..401.468 rows=81 loops=1)
+                          Hash Cond: (t.destination_account_id = d.id)
+                          Buffers: shared hit=13833 read=26006, temp read=344 written=344
+                          ->  Seq Scan on transfers t  (cost=0.09..66398.15 rows=1500203 width=87) (actual time=2.634..356.062 rows=81 loops=1)
+                                Filter: ((hashed SubPlan 7) OR (hashed SubPlan 8))
+                                Rows Removed by Filter: 1999926
+                                Buffers: shared hit=12558 read=23840
+                                SubPlan 7
+                                  ->  CTE Scan on mine mine_4  (cost=0.00..0.04 rows=2 width=16) (actual time=0.138..0.140 rows=2 loops=1)
+                                        Buffers: shared hit=3 read=1
+                                SubPlan 8
+                                  ->  CTE Scan on mine mine_5  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=2 loops=1)
+                          ->  Hash  (cost=4441.26..4441.26 rows=100026 width=35) (actual time=36.572..36.572 rows=100006 loops=1)
+                                Buckets: 131072  Batches: 2  Memory Usage: 4326kB
+                                Buffers: shared hit=1275 read=2166, temp written=342
+                                ->  Seq Scan on bank_accounts d  (cost=0.00..4441.26 rows=100026 width=35) (actual time=0.010..16.823 rows=100006 loops=1)
+                                      Buffers: shared hit=1275 read=2166
+                    ->  Memoize  (cost=0.43..0.46 rows=1 width=35) (actual time=0.003..0.003 rows=1 loops=81)
+                          Cache Key: t.source_account_id
+                          Cache Mode: logical
+                          Hits: 38  Misses: 43  Evictions: 0  Overflows: 0  Memory Usage: 7kB
+                          Buffers: shared hit=172
+                          ->  Index Scan using bank_accounts_pkey on bank_accounts s  (cost=0.42..0.45 rows=1 width=35) (actual time=0.004..0.004 rows=1 loops=43)
+                                Index Cond: (id = t.source_account_id)
+                                Buffers: shared hit=172
+                    SubPlan 2
+                      ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.002 rows=2 loops=1)
+                    SubPlan 3
+                      ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=2 loops=1)
+                    SubPlan 4
+                      ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=2 loops=1)
+        SubPlan 6
+          ->  Limit  (cost=16.80..16.81 rows=1 width=48) (actual time=0.014..0.014 rows=1 loops=81)
+                Buffers: shared hit=583
+                ->  Sort  (cost=16.80..16.81 rows=1 width=48) (actual time=0.013..0.013 rows=1 loops=81)
+                      Sort Key: h.joined_at, u.id
+                      Sort Method: quicksort  Memory: 25kB
+                      Buffers: shared hit=583
+                      ->  Nested Loop  (cost=0.75..16.79 rows=1 width=48) (actual time=0.012..0.012 rows=1 loops=81)
+                            Buffers: shared hit=583
+                            ->  Index Scan using account_holders_account_idx on account_holders h  (cost=0.46..8.48 rows=1 width=24) (actual time=0.003..0.003 rows=1 loops=81)
+                                  Index Cond: (account_id = CASE WHEN (hashed SubPlan 5) THEN t.destination_account_id ELSE t.source_account_id END)
+                                  Buffers: shared hit=328
+                                  SubPlan 5
+                                    ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.001 rows=2 loops=1)
+                            ->  Index Scan using users_pkey on users u  (cost=0.29..8.31 rows=1 width=40) (actual time=0.003..0.003 rows=1 loops=85)
+                                  Index Cond: (id = h.user_id)
+                                  Buffers: shared hit=255
+Planning:
+  Buffers: shared hit=25 read=11
+Planning Time: 0.623 ms
+JIT:
+  Functions: 100
+  Options: Inlining false, Optimization false, Expressions true, Deforming true
+  Timing: Generation 4.480 ms, Inlining 0.000 ms, Optimization 1.351 ms, Emission 27.260 ms, Total 33.091 ms
+Execution Time: 437.444 ms
+
+QUERY typical/insights_monthly
+WITH mine AS(SELECT account_id FROM paylink.account_holders WHERE user_id=%s)
+          SELECT count(*) AS transfer_count,
+          coalesce(sum(amount_cents) FILTER(WHERE source_account_id IN(SELECT account_id FROM mine)
+           AND destination_account_id NOT IN(SELECT account_id FROM mine)),0)::bigint AS sent_cents,
+          coalesce(sum(amount_cents) FILTER(WHERE destination_account_id IN(SELECT account_id FROM mine)
+           AND source_account_id NOT IN(SELECT account_id FROM mine)),0)::bigint AS received_cents
+          FROM paylink.transfers WHERE created_at>=date_trunc('month',now())
+          AND (source_account_id IN(SELECT account_id FROM mine) OR destination_account_id IN(SELECT account_id FROM mine))
+Parameters: (UUID('d36f0d78-1ac3-54d5-aebb-85eadb50d334'),)
+WITH relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=[]:
+Aggregate  (cost=43617.09..43617.10 rows=1 width=24) (actual time=72.182..72.186 rows=1 loops=1)
+  Buffers: shared hit=7766 read=7956
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=0.022..0.023 rows=2 loops=1)
+          Index Cond: (user_id = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=4
+  ->  Bitmap Heap Scan on transfers  (cost=3143.08..42108.47 rows=85713 width=40) (actual time=11.674..72.120 rows=3 loops=1)
+        Recheck Cond: (created_at >= date_trunc('month'::text, now()))
+        Filter: ((hashed SubPlan 6) OR (hashed SubPlan 7))
+        Rows Removed by Filter: 115071
+        Heap Blocks: exact=15148
+        Buffers: shared hit=7766 read=7956
+        ->  Bitmap Index Scan on transfers_created_time_idx  (cost=0.00..3121.56 rows=114284 width=0) (actual time=9.135..9.135 rows=115074 loops=1)
+              Index Cond: (created_at >= date_trunc('month'::text, now()))
+              Buffers: shared read=570
+        SubPlan 6
+          ->  CTE Scan on mine mine_4  (cost=0.00..0.04 rows=2 width=16) (actual time=0.024..0.025 rows=2 loops=1)
+                Buffers: shared hit=4
+        SubPlan 7
+          ->  CTE Scan on mine mine_5  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=2 loops=1)
+  SubPlan 2
+    ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=2 loops=1)
+  SubPlan 3
+    ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.002 rows=2 loops=1)
+  SubPlan 4
+    ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=2 loops=1)
+  SubPlan 5
+    ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.000 rows=2 loops=1)
+Planning:
+  Buffers: shared hit=52 read=3
+Planning Time: 0.689 ms
+Execution Time: 72.419 ms
+WITHOUT_NEW relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=['transfers_created_time_idx']:
+Aggregate  (cost=82908.80..82908.82 rows=1 width=24) (actual time=353.267..353.271 rows=1 loops=1)
+  Buffers: shared hit=15187 read=21211
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=0.019..0.020 rows=2 loops=1)
+          Index Cond: (user_id = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=4
+  ->  Seq Scan on transfers  (cost=0.09..81400.19 rows=85713 width=40) (actual time=90.353..353.182 rows=3 loops=1)
+        Filter: (((hashed SubPlan 6) OR (hashed SubPlan 7)) AND (created_at >= date_trunc('month'::text, now())))
+        Rows Removed by Filter: 2000004
+        Buffers: shared hit=15187 read=21211
+        SubPlan 6
+          ->  CTE Scan on mine mine_4  (cost=0.00..0.04 rows=2 width=16) (actual time=0.020..0.021 rows=2 loops=1)
+                Buffers: shared hit=4
+        SubPlan 7
+          ->  CTE Scan on mine mine_5  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=2 loops=1)
+  SubPlan 2
+    ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.001 rows=2 loops=1)
+  SubPlan 3
+    ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.001 rows=2 loops=1)
+  SubPlan 4
+    ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.000 rows=2 loops=1)
+  SubPlan 5
+    ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.000 rows=2 loops=1)
+Planning:
+  Buffers: shared hit=4
+Planning Time: 0.205 ms
+Execution Time: 353.412 ms
+WITHOUT relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx']:
+Aggregate  (cost=82908.80..82908.82 rows=1 width=24) (actual time=421.101..421.105 rows=1 loops=1)
+  Buffers: shared hit=15219 read=21179
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=0.020..0.021 rows=2 loops=1)
+          Index Cond: (user_id = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=4
+  ->  Seq Scan on transfers  (cost=0.09..81400.19 rows=85713 width=40) (actual time=88.933..421.002 rows=3 loops=1)
+        Filter: (((hashed SubPlan 6) OR (hashed SubPlan 7)) AND (created_at >= date_trunc('month'::text, now())))
+        Rows Removed by Filter: 2000004
+        Buffers: shared hit=15219 read=21179
+        SubPlan 6
+          ->  CTE Scan on mine mine_4  (cost=0.00..0.04 rows=2 width=16) (actual time=0.021..0.022 rows=2 loops=1)
+                Buffers: shared hit=4
+        SubPlan 7
+          ->  CTE Scan on mine mine_5  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=2 loops=1)
+  SubPlan 2
+    ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.001 rows=2 loops=1)
+  SubPlan 3
+    ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.002 rows=2 loops=1)
+  SubPlan 4
+    ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.001 rows=2 loops=1)
+  SubPlan 5
+    ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.000 rows=2 loops=1)
+Planning:
+  Buffers: shared hit=4
+Planning Time: 0.190 ms
+Execution Time: 421.244 ms
+
+QUERY typical/insights_weekly
+WITH days AS(SELECT generate_series(current_date-6,current_date,'1 day')::date AS day),
+          mine AS(SELECT account_id FROM paylink.account_holders WHERE user_id=%s)
+          SELECT days.day,coalesce(sum(t.amount_cents) FILTER(WHERE t.source_account_id IN(SELECT account_id FROM mine)),0)::bigint AS sent,
+          coalesce(sum(t.amount_cents) FILTER(WHERE t.destination_account_id IN(SELECT account_id FROM mine)),0)::bigint AS received
+          FROM days LEFT JOIN paylink.transfers t ON t.created_at>=days.day AND t.created_at<days.day+interval '1 day'
+          AND (t.source_account_id IN(SELECT account_id FROM mine) OR t.destination_account_id IN(SELECT account_id FROM mine))
+          GROUP BY days.day ORDER BY days.day
+Parameters: (UUID('d36f0d78-1ac3-54d5-aebb-85eadb50d334'),)
+WITH relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=[]:
+Sort  (cost=9492517.99..9492518.49 rows=200 width=20) (actual time=277.067..277.072 rows=7 loops=1)
+  Sort Key: (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=33066
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=10.015..10.021 rows=2 loops=1)
+          Index Cond: (user_id = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=4
+  ->  HashAggregate  (cost=9492497.89..9492501.89 rows=200 width=20) (actual time=277.050..277.055 rows=7 loops=1)
+        Group Key: (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)
+        Batches: 1  Memory Usage: 40kB
+        Buffers: shared hit=33066
+        ->  Nested Loop Left Join  (cost=0.52..7408882.53 rows=166689222 width=44) (actual time=226.302..246.795 rows=7 loops=1)
+              Buffers: shared hit=33066
+              ->  Result  (cost=0.00..32.53 rows=1000 width=4) (actual time=201.692..201.711 rows=7 loops=1)
+                    ->  ProjectSet  (cost=0.00..5.03 rows=1000 width=8) (actual time=201.689..201.703 rows=7 loops=1)
+                          ->  Result  (cost=0.00..0.01 rows=1 width=0) (actual time=201.670..201.670 rows=1 loops=1)
+              ->  Index Scan using transfers_created_time_idx on transfers t  (cost=0.52..5741.96 rows=166689 width=48) (actual time=6.434..6.435 rows=0 loops=7)
+                    Index Cond: ((created_at >= (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)) AND (created_at < ((((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date) + '1 day'::interval)))
+                    Filter: ((hashed SubPlan 4) OR (hashed SubPlan 5))
+                    Rows Removed by Filter: 4697
+                    Buffers: shared hit=33066
+                    SubPlan 4
+                      ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=10.019..10.026 rows=2 loops=1)
+                            Buffers: shared hit=4
+                    SubPlan 5
+                      ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.003 rows=2 loops=1)
+        SubPlan 2
+          ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.004 rows=2 loops=1)
+        SubPlan 3
+          ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.003 rows=2 loops=1)
+Planning:
+  Buffers: shared hit=57
+Planning Time: 1.943 ms
+JIT:
+  Functions: 55
+  Options: Inlining true, Optimization true, Expressions true, Deforming true
+  Timing: Generation 3.516 ms, Inlining 39.937 ms, Optimization 130.045 ms, Emission 80.841 ms, Total 254.338 ms
+Execution Time: 280.541 ms
+WITHOUT_NEW relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=['transfers_created_time_idx']:
+Sort  (cost=27313271.99..27313272.49 rows=200 width=20) (actual time=1659.031..1659.035 rows=7 loops=1)
+  Sort Key: (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=6806 read=156977
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=10.012..10.018 rows=2 loops=1)
+          Index Cond: (user_id = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=4
+  ->  HashAggregate  (cost=27313251.89..27313255.89 rows=200 width=20) (actual time=1659.013..1659.018 rows=7 loops=1)
+        Group Key: (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)
+        Batches: 1  Memory Usage: 40kB
+        Buffers: shared hit=6806 read=156977
+        ->  Nested Loop Left Join  (cost=0.52..25229636.53 rows=166689222 width=44) (actual time=432.856..1626.970 rows=7 loops=1)
+              Buffers: shared hit=6806 read=156977
+              ->  Result  (cost=0.00..32.53 rows=1000 width=4) (actual time=201.952..201.985 rows=7 loops=1)
+                    ->  ProjectSet  (cost=0.00..5.03 rows=1000 width=8) (actual time=201.949..201.976 rows=7 loops=1)
+                          ->  Result  (cost=0.00..0.01 rows=1 width=0) (actual time=201.932..201.932 rows=1 loops=1)
+              ->  Index Scan using transfers_destination_time_idx on transfers t  (cost=0.52..23562.71 rows=166689 width=48) (actual time=203.559..203.559 rows=0 loops=7)
+                    Index Cond: ((created_at >= (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)) AND (created_at < ((((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date) + '1 day'::interval)))
+                    Filter: ((hashed SubPlan 4) OR (hashed SubPlan 5))
+                    Rows Removed by Filter: 4697
+                    Buffers: shared hit=6806 read=156977
+                    SubPlan 4
+                      ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=10.016..10.022 rows=2 loops=1)
+                            Buffers: shared hit=4
+                    SubPlan 5
+                      ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.002 rows=2 loops=1)
+        SubPlan 2
+          ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.004 rows=2 loops=1)
+        SubPlan 3
+          ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.003 rows=2 loops=1)
+Planning:
+  Buffers: shared hit=6
+Planning Time: 0.274 ms
+JIT:
+  Functions: 55
+  Options: Inlining true, Optimization true, Expressions true, Deforming true
+  Timing: Generation 2.386 ms, Inlining 31.855 ms, Optimization 130.749 ms, Emission 90.065 ms, Total 255.055 ms
+Execution Time: 1661.099 ms
+WITHOUT relevant=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx'], dropped=['transfers_source_time_idx', 'transfers_destination_time_idx', 'transfers_created_time_idx']:
+Sort  (cost=45343876.65..45343877.15 rows=200 width=20) (actual time=571.443..571.448 rows=7 loops=1)
+  Sort Key: (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=2 read=36396
+  CTE mine
+    ->  Index Only Scan using account_holders_pkey on account_holders  (cost=0.42..8.45 rows=2 width=16) (actual time=9.997..10.003 rows=2 loops=1)
+          Index Cond: (user_id = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid)
+          Heap Fetches: 0
+          Buffers: shared hit=1 read=3
+  ->  HashAggregate  (cost=45343856.56..45343860.56 rows=200 width=20) (actual time=571.426..571.432 rows=7 loops=1)
+        Group Key: (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)
+        Batches: 1  Memory Usage: 40kB
+        Buffers: shared hit=2 read=36396
+        ->  Nested Loop Left Join  (cost=0.09..43260241.19 rows=166689222 width=44) (actual time=542.329..542.394 rows=7 loops=1)
+              Join Filter: ((t.created_at >= (((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date)) AND (t.created_at < ((((generate_series(((CURRENT_DATE - 6))::timestamp with time zone, (CURRENT_DATE)::timestamp with time zone, '1 day'::interval)))::date) + '1 day'::interval)))
+              Rows Removed by Join Filter: 567
+              Buffers: shared hit=2 read=36396
+              ->  Result  (cost=0.00..32.53 rows=1000 width=4) (actual time=193.493..193.502 rows=7 loops=1)
+                    ->  ProjectSet  (cost=0.00..5.03 rows=1000 width=8) (actual time=193.490..193.497 rows=7 loops=1)
+                          ->  Result  (cost=0.00..0.01 rows=1 width=0) (actual time=193.471..193.471 rows=1 loops=1)
+              ->  Materialize  (cost=0.09..87085.17 rows=1500203 width=48) (actual time=3.097..49.828 rows=81 loops=7)
+                    Buffers: shared hit=2 read=36396
+                    ->  Seq Scan on transfers t  (cost=0.09..66398.15 rows=1500203 width=48) (actual time=21.674..348.703 rows=81 loops=1)
+                          Filter: ((hashed SubPlan 4) OR (hashed SubPlan 5))
+                          Rows Removed by Filter: 1999926
+                          Buffers: shared hit=2 read=36396
+                          SubPlan 4
+                            ->  CTE Scan on mine mine_2  (cost=0.00..0.04 rows=2 width=16) (actual time=10.001..10.008 rows=2 loops=1)
+                                  Buffers: shared hit=1 read=3
+                          SubPlan 5
+                            ->  CTE Scan on mine mine_3  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.002 rows=2 loops=1)
+        SubPlan 2
+          ->  CTE Scan on mine  (cost=0.00..0.04 rows=2 width=16) (actual time=0.001..0.003 rows=2 loops=1)
+        SubPlan 3
+          ->  CTE Scan on mine mine_1  (cost=0.00..0.04 rows=2 width=16) (actual time=0.000..0.003 rows=2 loops=1)
+Planning:
+  Buffers: shared hit=4 read=2
+Planning Time: 0.241 ms
+JIT:
+  Functions: 55
+  Options: Inlining true, Optimization true, Expressions true, Deforming true
+  Timing: Generation 2.369 ms, Inlining 31.816 ms, Optimization 128.274 ms, Emission 81.074 ms, Total 243.533 ms
+Execution Time: 573.419 ms
+
+QUERY typical/idempotency
+SELECT * FROM paylink.transfers WHERE initiated_by=%s AND idempotency_key=%s
+Parameters: (UUID('d36f0d78-1ac3-54d5-aebb-85eadb50d334'), UUID('137fcd01-b7d5-59bd-9a21-f2cf474065f8'))
+WITH relevant=['transfers_initiated_by_idempotency_key_key'], dropped=[]:
+Index Scan using transfers_initiated_by_idempotency_key_key on transfers  (cost=0.43..8.45 rows=1 width=119) (actual time=0.030..0.031 rows=1 loops=1)
+  Index Cond: ((initiated_by = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid) AND (idempotency_key = '137fcd01-b7d5-59bd-9a21-f2cf474065f8'::uuid))
+  Buffers: shared read=4
+Planning:
+  Buffers: shared hit=52 read=3
+Planning Time: 0.442 ms
+Execution Time: 0.047 ms
+WITHOUT relevant=['transfers_initiated_by_idempotency_key_key'], dropped=['transfers_initiated_by_idempotency_key_key']:
+Gather  (cost=1000.00..49895.79 rows=1 width=119) (actual time=89.430..104.424 rows=1 loops=1)
+  Workers Planned: 2
+  Workers Launched: 2
+  Buffers: shared hit=34 read=36360
+  ->  Parallel Seq Scan on transfers  (cost=0.00..48895.69 rows=1 width=119) (actual time=48.480..68.770 rows=0 loops=3)
+        Filter: ((initiated_by = 'd36f0d78-1ac3-54d5-aebb-85eadb50d334'::uuid) AND (idempotency_key = '137fcd01-b7d5-59bd-9a21-f2cf474065f8'::uuid))
+        Rows Removed by Filter: 666669
+        Buffers: shared hit=34 read=36360
+Planning:
+  Buffers: shared hit=4
+Planning Time: 0.103 ms
+Execution Time: 104.439 ms
+
+QUERY typical/holder_count
+SELECT count(*) FROM paylink.account_holders h2 WHERE h2.account_id=%s
+Parameters: (UUID('81198019-8fc7-5dbd-9b4c-d52f782acb1f'),)
+WITH relevant=['account_holders_account_idx'], dropped=[]:
+Aggregate  (cost=8.44..8.45 rows=1 width=8) (actual time=0.056..0.056 rows=1 loops=1)
+  Buffers: shared hit=1 read=3
+  ->  Index Only Scan using account_holders_account_idx on account_holders h2  (cost=0.42..8.44 rows=1 width=0) (actual time=0.050..0.051 rows=1 loops=1)
+        Index Cond: (account_id = '81198019-8fc7-5dbd-9b4c-d52f782acb1f'::uuid)
+        Heap Fetches: 0
+        Buffers: shared hit=1 read=3
+Planning Time: 0.065 ms
+Execution Time: 0.082 ms
+WITHOUT relevant=['account_holders_account_idx'], dropped=['account_holders_account_idx']:
+Aggregate  (cost=3209.37..3209.38 rows=1 width=8) (actual time=10.058..10.059 rows=1 loops=1)
+  Buffers: shared read=1834
+  ->  Seq Scan on account_holders h2  (cost=0.00..3209.36 rows=1 width=0) (actual time=8.581..10.054 rows=1 loops=1)
+        Filter: (account_id = '81198019-8fc7-5dbd-9b4c-d52f782acb1f'::uuid)
+        Rows Removed by Filter: 110006
+        Buffers: shared read=1834
+Planning:
+  Buffers: shared hit=4
+Planning Time: 0.088 ms
+Execution Time: 10.070 ms
+
+TIMING SUMMARY (single runs):
+('heavy', 'login', 'WITH', 'Execution Time: 0.068 ms')
+('heavy', 'login', 'WITHOUT', 'Execution Time: 4.289 ms')
+('heavy', 'ACCOUNT_SQL', 'WITH', 'Execution Time: 0.267 ms')
+('heavy', 'ACCOUNT_SQL', 'WITHOUT', 'Execution Time: 23.999 ms')
+('heavy', 'recipients', 'WITH', 'Execution Time: 0.338 ms')
+('heavy', 'recipients', 'WITHOUT', 'Execution Time: 4.902 ms')
+('heavy', 'HISTORY_SQL', 'WITH', 'Execution Time: 277.350 ms')
+('heavy', 'HISTORY_SQL', 'WITHOUT_NEW', 'Execution Time: 466.904 ms')
+('heavy', 'HISTORY_SQL', 'WITHOUT', 'Execution Time: 458.473 ms')
+('heavy', 'insights_monthly', 'WITH', 'Execution Time: 81.283 ms')
+('heavy', 'insights_monthly', 'WITHOUT_NEW', 'Execution Time: 381.040 ms')
+('heavy', 'insights_monthly', 'WITHOUT', 'Execution Time: 376.675 ms')
+('heavy', 'insights_weekly', 'WITH', 'Execution Time: 348.685 ms')
+('heavy', 'insights_weekly', 'WITHOUT_NEW', 'Execution Time: 1899.688 ms')
+('heavy', 'insights_weekly', 'WITHOUT', 'Execution Time: 609.762 ms')
+('heavy', 'idempotency', 'WITH', 'Execution Time: 0.056 ms')
+('heavy', 'idempotency', 'WITHOUT', 'Execution Time: 87.412 ms')
+('heavy', 'holder_count', 'WITH', 'Execution Time: 0.080 ms')
+('heavy', 'holder_count', 'WITHOUT', 'Execution Time: 10.047 ms')
+('typical', 'login', 'WITH', 'Execution Time: 0.110 ms')
+('typical', 'login', 'WITHOUT', 'Execution Time: 11.005 ms')
+('typical', 'ACCOUNT_SQL', 'WITH', 'Execution Time: 0.211 ms')
+('typical', 'ACCOUNT_SQL', 'WITHOUT', 'Execution Time: 18.268 ms')
+('typical', 'recipients', 'WITH', 'Execution Time: 0.309 ms')
+('typical', 'recipients', 'WITHOUT', 'Execution Time: 5.276 ms')
+('typical', 'HISTORY_SQL', 'WITH', 'Execution Time: 1369.912 ms')
+('typical', 'HISTORY_SQL', 'WITHOUT_NEW', 'Execution Time: 429.570 ms')
+('typical', 'HISTORY_SQL', 'WITHOUT', 'Execution Time: 437.444 ms')
+('typical', 'insights_monthly', 'WITH', 'Execution Time: 72.419 ms')
+('typical', 'insights_monthly', 'WITHOUT_NEW', 'Execution Time: 353.412 ms')
+('typical', 'insights_monthly', 'WITHOUT', 'Execution Time: 421.244 ms')
+('typical', 'insights_weekly', 'WITH', 'Execution Time: 280.541 ms')
+('typical', 'insights_weekly', 'WITHOUT_NEW', 'Execution Time: 1661.099 ms')
+('typical', 'insights_weekly', 'WITHOUT', 'Execution Time: 573.419 ms')
+('typical', 'idempotency', 'WITH', 'Execution Time: 0.047 ms')
+('typical', 'idempotency', 'WITHOUT', 'Execution Time: 104.439 ms')
+('typical', 'holder_count', 'WITH', 'Execution Time: 0.082 ms')
+('typical', 'holder_count', 'WITHOUT', 'Execution Time: 10.070 ms')
+New migration: transfers_created_time_idx supports global insights time ranges; WITHOUT_NEW preserves the old account-prefix indexes for the before/after comparison. WITHOUT drops all listed relevant indexes. OR-of-subqueries may still scan transfers; ablation does not rewrite SQL.
+All DDL rolled back; no fixtures inserted or balances modified.
