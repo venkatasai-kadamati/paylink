@@ -1,11 +1,12 @@
 """Exact application SQL, local-only measured plans; transactional index ablation.
 
-AST extraction avoids application startup. Single warm-cache measurements are
-diagnostic, not controlled latency benchmarks. Unique constraints are dropped
+AST extraction avoids application startup. Three executions per query/candidate
+are recorded in full with median execution time. Unique constraints are dropped
 only inside rolled-back savepoints. No data or schema changes survive.
 """
 import ast
 import os
+from statistics import median
 from pathlib import Path
 from dotenv import dotenv_values
 import psycopg
@@ -40,7 +41,10 @@ def main():
     out = lambda value: lines.append(str(value))
     with psycopg.connect(local_url(config['ADMIN_DATABASE_URL'])) as c:
         out(c.execute('SELECT version()').fetchone()[0])
-        out('LOCAL ONLY. Single warm-cache runs; planner defaults unchanged. SQL extracted from backend/app/main.py.')
+        out('LOCAL ONLY. Three runs per case; median Execution Time; planner defaults unchanged. SQL extracted from backend/app/main.py.')
+        out('Candidates interleaved per query in rotating order across three rounds to limit time/cache drift. Candidate indexes built once; unwanted candidates dropped transactionally for each execution.')
+        out('Meaningful regression threshold: increase > max(10% of baseline, 10 ms). Compare each candidate against BASELINE (existing account-prefix indexes only).')
+        out(('created_at physical correlation', c.execute("SELECT correlation FROM pg_stats WHERE schemaname='paylink' AND tablename='transfers' AND attname='created_at'").fetchone()[0]))
         out('Table: rows, heap_bytes, indexes_bytes, total_bytes (includes TOAST)')
         for table, in c.execute("SELECT tablename FROM pg_tables WHERE schemaname='paylink' ORDER BY tablename").fetchall():
             count = c.execute('SELECT count(*) FROM paylink.'+table).fetchone()[0]
@@ -65,9 +69,7 @@ def main():
             'idempotency': ['transfers_initiated_by_idempotency_key_key'],
             'holder_count': ['account_holders_account_idx'],
         }
-        for name in ('HISTORY_SQL', 'insights_monthly', 'insights_weekly'):
-            indexes[name].append('transfers_created_time_idx')
-        timings = []
+        cases = []
         for label, (uid, username, activity) in [('heavy', users[0]), ('typical', users[len(users)//2])]:
             account = c.execute('SELECT account_id FROM paylink.account_holders WHERE user_id=%s ORDER BY account_id LIMIT 1', (uid,)).fetchone()[0]
             key = c.execute('SELECT idempotency_key FROM paylink.transfers WHERE initiated_by=%s ORDER BY id LIMIT 1', (uid,)).fetchone()[0]
@@ -78,25 +80,72 @@ def main():
                 if name == 'recipients': params = (username, username, username, users[-1][0])
                 if name == 'idempotency': params = (uid, key)
                 if name == 'holder_count': params = (account,)
-                out(f'\nQUERY {label}/{name}\n{sql}\nParameters: {params}')
-                modes = ('WITH', 'WITHOUT_NEW', 'WITHOUT') if 'transfers_created_time_idx' in indexes[name] else ('WITH', 'WITHOUT')
-                for mode in modes:
-                    c.execute('SAVEPOINT plan')
-                    dropped = ['transfers_created_time_idx'] if mode == 'WITHOUT_NEW' else indexes[name]
-                    if mode != 'WITH':
-                        for idx in dropped:
-                            constraint = c.execute('SELECT conrelid::regclass::text,conname FROM pg_constraint WHERE conindid=to_regclass(%s)', ('paylink.'+idx,)).fetchone()
-                            if constraint: c.execute(f'ALTER TABLE {constraint[0]} DROP CONSTRAINT {constraint[1]}')
-                            else: c.execute('DROP INDEX paylink.'+idx)
-                    out(f'{mode} relevant={indexes[name]}, dropped={dropped if mode != "WITH" else []}:')
+                cases.append((label, name, sql, params))
+        # Remove the installed candidate transactionally so each alternative is
+        # measured alone against the same existing application indexes.
+        c.execute('DROP INDEX IF EXISTS paylink.transfers_created_time_idx')
+        candidates = {
+            'BASELINE': None,
+            'BTREE': 'CREATE INDEX evidence_btree_idx ON paylink.transfers(created_at DESC,id DESC)',
+            'BRIN128': 'CREATE INDEX evidence_brin128_idx ON paylink.transfers USING brin(created_at) WITH (pages_per_range=128)',
+            'BRIN32': 'CREATE INDEX evidence_brin32_idx ON paylink.transfers USING brin(created_at) WITH (pages_per_range=32)',
+        }
+        candidate_indexes = {'BTREE': 'evidence_btree_idx', 'BRIN128': 'evidence_brin128_idx', 'BRIN32': 'evidence_brin32_idx'}
+        timings = []
+        for mode, ddl in candidates.items():
+            if ddl:
+                c.execute(ddl)
+                out((mode, ddl, 'index bytes', c.execute('SELECT pg_relation_size(%s)', ('paylink.'+candidate_indexes[mode],)).fetchone()[0]))
+        modes = list(candidates)
+        for label, name, sql, params in cases:
+            samples = {mode: [] for mode in modes}
+            out(f'\nQUERY {label}/{name}\n{sql}\nParameters: {params}')
+            for run in range(3):
+                for mode in modes[run:]+modes[:run]:
+                    c.execute('SAVEPOINT candidate')
+                    for other, idx in candidate_indexes.items():
+                        if other != mode:
+                            c.execute('DROP INDEX paylink.'+idx)
+                    out(f'{mode} RUN {run+1}')
                     plan = [r[0] for r in c.execute('EXPLAIN (ANALYZE, BUFFERS) '+sql, params)]
                     lines.extend(plan)
-                    timings.append((label, name, mode, next(p for p in plan if p.startswith('Execution Time:'))))
-                    c.execute('ROLLBACK TO SAVEPOINT plan')
-                    c.execute('RELEASE SAVEPOINT plan')
-        out('\nTIMING SUMMARY (single runs):')
+                    samples[mode].append(float(next(p for p in plan if p.startswith('Execution Time:')).split()[2]))
+                    c.execute('ROLLBACK TO SAVEPOINT candidate')
+                    c.execute('RELEASE SAVEPOINT candidate')
+            for mode in modes:
+                timings.append((label, name, mode, median(samples[mode]), samples[mode]))
+        for idx in candidate_indexes.values():
+            c.execute('DROP INDEX paylink.'+idx)
+        # Preserve the original evidence's relevant-existing-index ablation.
+        for label, name, sql, params in cases:
+            samples = []
+            out(f'\nQUERY WITHOUT_RELEVANT/{label}/{name}; dropped={indexes[name]}')
+            for run in range(1, 4):
+                c.execute('SAVEPOINT plan')
+                for idx in indexes[name]:
+                    constraint = c.execute('SELECT conrelid::regclass::text,conname FROM pg_constraint WHERE conindid=to_regclass(%s)', ('paylink.'+idx,)).fetchone()
+                    if constraint: c.execute(f'ALTER TABLE {constraint[0]} DROP CONSTRAINT {constraint[1]}')
+                    else: c.execute('DROP INDEX paylink.'+idx)
+                out(f'RUN {run}')
+                plan = [r[0] for r in c.execute('EXPLAIN (ANALYZE, BUFFERS) '+sql, params)]
+                lines.extend(plan)
+                samples.append(float(next(p for p in plan if p.startswith('Execution Time:')).split()[2]))
+                c.execute('ROLLBACK TO SAVEPOINT plan')
+                c.execute('RELEASE SAVEPOINT plan')
+            timings.append((label, name, 'WITHOUT_RELEVANT', median(samples), samples))
+        out('\nTIMING SUMMARY (label, query, candidate, median_ms, samples_ms):')
         for row in timings: out(row)
-        out('New migration: transfers_created_time_idx supports global insights time ranges; WITHOUT_NEW preserves the old account-prefix indexes for the before/after comparison. WITHOUT drops all listed relevant indexes. OR-of-subqueries may still scan transfers; ablation does not rewrite SQL.')
+        baseline = {(label, name): value for label, name, mode, value, _ in timings if mode == 'BASELINE'}
+        out('CANDIDATE REGRESSION CHECK:')
+        checks = {}
+        for candidate in candidates:
+            if candidate == 'BASELINE': continue
+            regressions = [(label, name, baseline[label, name], value) for label, name, mode, value, _ in timings
+                           if mode == candidate and value-baseline[label, name] > max(10, baseline[label, name]*.1)]
+            checks[candidate] = regressions
+            out((candidate, 'meaningful regressions', regressions))
+        out('Migration choice: BRIN128; small time-range summaries cannot supply history ordering. Monthly insights benefit; weekly insights may keep the baseline plan.')
+        out(('BRIN128 meets the no-meaningful-regression threshold', not checks['BRIN128']))
         out('All DDL rolled back; no fixtures inserted or balances modified.')
         c.rollback()
     output = '\n'.join(lines)+'\n'

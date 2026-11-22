@@ -3,7 +3,9 @@
 Bulk loading deliberately bypasses execute_transfer. Opening balances cover ALL
 outgoing payments, so even chronological replay cannot overdraw. No app limits
 are bypassed for ownership. --reset removes only this generator's namespace;
-demo data is preserved. Default anchor is fixed for reproducibility; use --as-of
+demo data is preserved. Transfers are inserted chronologically, modeling an
+append-only ledger and allowing time-range BRIN indexes to summarize the heap.
+Default anchor is fixed for reproducibility; use --as-of
 to refresh the 365-day window. Reuse the same anchor to reproduce identical rows.
 """
 import argparse
@@ -92,7 +94,8 @@ def generate(c, scale=1, reset=False, namespace='benchmark', as_of='2026-11-22')
       t.key,%s::timestamptz - ((g*104729%%31536000)*interval '1 second')
       FROM syn_transfer_ids t
       JOIN syn_accounts s ON s.i=CASE WHEN g%%5=0 THEN (g/5)%%greatest(1,%s/100) ELSE (g::bigint*7919)%%%s END
-      JOIN syn_accounts d ON d.i=(s.i+1+(g::bigint*31)%%(%s-1))%%%s''',
+      JOIN syn_accounts d ON d.i=(s.i+1+(g::bigint*31)%%(%s-1))%%%s
+      ORDER BY (g*104729%%31536000) DESC,g''',
       (prefix+'transfer', anchor, n*2, n*2, n*2, n*2))
     c.execute('''WITH outgoing AS(SELECT source_account_id id,sum(amount_cents) amount FROM paylink.transfers
       WHERE initiated_by IN(SELECT id FROM syn_users) GROUP BY 1),

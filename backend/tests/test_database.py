@@ -17,7 +17,9 @@ def test_synthetic_generator_isolated_and_deterministic():
     namespace = uuid4().hex[:10]
     prefix = 'syn_' + namespace + '_'
     with psycopg.connect(C['ADMIN_DATABASE_URL']) as c:
-        assert c.execute("SELECT to_regclass('paylink.transfers_created_time_idx')").fetchone()[0]
+        assert c.execute("""SELECT am.amname,i.reloptions,pg_get_indexdef(i.oid,1,true)
+          FROM pg_class i JOIN pg_am am ON am.oid=i.relam
+          WHERE i.oid=to_regclass('paylink.transfers_created_time_idx')""").fetchone() == ('brin', ['pages_per_range=128'], 'created_at')
         def snapshot():
             result = []
             for table, predicate in (
@@ -31,6 +33,10 @@ def test_synthetic_generator_isolated_and_deterministic():
         assert module.generate(c, .0002, namespace=namespace) == (10,25,20,22,400)
         first = snapshot()
         assert all(first)
+        assert c.execute('''SELECT count(*) FROM (
+          SELECT created_at,lag(created_at) OVER(ORDER BY ctid) previous
+          FROM paylink.transfers WHERE starts_with(memo,%s)) ordered
+          WHERE created_at<previous''', (prefix,)).fetchone()[0] == 0
         assert c.execute(module.RECONCILE).fetchone()[0] == 0
         assert c.execute('''SELECT max(n) FROM(SELECT count(*) n FROM paylink.account_holders
           WHERE user_id IN(SELECT id FROM paylink.users WHERE starts_with(username,%s)) GROUP BY user_id) x''', (prefix,)).fetchone()[0] <= 4
