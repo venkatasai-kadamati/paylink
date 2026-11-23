@@ -414,7 +414,7 @@ export default function Home() {
     [hidden, setHidden] = useState(false);
   const [filter, setFilter] = useState("All activity"),
     [search, setSearch] = useState("");
-  const [shareAccount,setShareAccount]=useState("");
+  const [shareAccount, setShareAccount] = useState("");
   const [invitations, setInvitations] = useState<Invitation[]>([]),
     [selectedAccount, setSelectedAccount] = useState<Account | null>(null),
     [accountFilter, setAccountFilter] = useState(""),
@@ -563,6 +563,11 @@ export default function Home() {
             onClick={() => setBot(true)}
           >
             <MessageSquare size={18} /> PayBot
+            <ArrowUpRight
+              className="paybot-arrow"
+              size={17}
+              aria-hidden="true"
+            />
           </button>
           <div className="simulation-note">Simulated funds only</div>
           <div className="profile">
@@ -860,7 +865,10 @@ export default function Home() {
                         {accounts.some((a) => a.active) && (
                           <button
                             className="button secondary small"
-                            onClick={() => {setShareAccount("");setShare(true);}}
+                            onClick={() => {
+                              setShareAccount("");
+                              setShare(true);
+                            }}
                           >
                             Add joint owner
                           </button>
@@ -1774,7 +1782,7 @@ function ShareModal({
   onClose,
   onDone,
 }: {
-  initialAccount:string;
+  initialAccount: string;
   accounts: Account[];
   onClose: () => void;
   onDone: () => void;
@@ -1811,7 +1819,11 @@ function ShareModal({
       <form onSubmit={submit}>
         <label>
           Account to share
-          <select name="account_id" required defaultValue={initialAccount||undefined}>
+          <select
+            name="account_id"
+            required
+            defaultValue={initialAccount || undefined}
+          >
             {accounts
               .filter((a) => a.active)
               .map((a) => (

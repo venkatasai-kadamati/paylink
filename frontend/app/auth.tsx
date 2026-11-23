@@ -148,27 +148,32 @@ export function Auth({ onLogin }: { onLogin: () => void }) {
                 />
               </label>
             )}
-            <label>
-              {register ? "Username" : "Username or email"}
-              <input
-                autoFocus={!register}
-                name="username"
-                required
-                autoComplete="username"
-                minLength={register ? 3 : undefined}
-                maxLength={register ? 30 : undefined}
-                pattern={register ? "[a-z][a-z0-9_]{2,29}" : undefined}
-                placeholder={
-                  register ? "e.g. jordan_lee" : "Enter your username or email"
-                }
-              />
+            <div>
+              <label>
+                {register ? "Username" : "Username or email"}
+                <input
+                  autoFocus={!register}
+                  name="username"
+                  required
+                  autoComplete="username"
+                  aria-describedby={register ? "username-hint" : undefined}
+                  minLength={register ? 3 : undefined}
+                  maxLength={register ? 30 : undefined}
+                  pattern={register ? "[a-z][a-z0-9_]{2,29}" : undefined}
+                  placeholder={
+                    register
+                      ? "e.g. jordan_lee"
+                      : "Enter your username or email"
+                  }
+                />
+              </label>
               {register && (
-                <span className="field-hint">
+                <span id="username-hint" className="field-hint">
                   3–30 lowercase letters, numbers, or underscores. Start with a
                   letter.
                 </span>
               )}
-            </label>
+            </div>
             {register && (
               <label>
                 Email address

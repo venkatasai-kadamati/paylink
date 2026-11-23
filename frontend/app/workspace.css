@@ -157,10 +157,8 @@ label {
   font-size: 13px;
   font-weight: 600;
 }
-.paybot-trigger::after {
-  content: "↗";
+.paybot-trigger .paybot-arrow {
   margin-left: auto;
-  font-size: 18px;
 }
 .simulation-note {
   font-size: 10px;
@@ -1734,11 +1732,19 @@ label {
   }
   .sidebar {
     transform: translateX(-100%);
+    display: flex;
+    top: 65px;
+    height: calc(100dvh - 65px);
+    visibility: hidden;
     padding: 28px 18px;
     box-shadow: 15px 0 55px #12312422;
   }
   .sidebar.mobile-open {
     transform: translateX(0);
+    visibility: visible;
+    top: 65px;
+    height: calc(100dvh - 65px);
+    width: min(224px, 75vw);
   }
   .sidebar nav button {
     padding: 13px 14px;

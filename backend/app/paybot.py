@@ -25,6 +25,7 @@ GUIDES = {
     'send_help': 'On Overview, select Send money. Find the recipient by exact username, email, or phone, then select their account. Choose your source account, enter the amount, and review before confirming.',
     'joint_help': 'On Accounts, select Add joint owner. Choose the account and enter the person’s exact PayLink username. They must accept in Invitations before both owners can see and spend the shared balance. Invitations expire after seven days and can be cancelled before acceptance.',
     'csv_help': 'Open Activity and select Export CSV. The file contains your latest 200 transfers, including the amount, direction, and note. Search and filters do not change the export.',
+    'period_help': 'I can total today, the last 7 days, the last 30 days, or this month. Please ask for one of those ranges.',
     'unsupported': 'I can explain your balances, transfers, period totals, and top counterparties, or help with sending money, joint owners, and CSV exports. I can’t make transfers or change your accounts.',
 }
 
@@ -48,15 +49,24 @@ def understand(question):
     if re.search(r'\b(?:balance|balances|available funds)\b', q):
         return 'balances', q
     if re.search(r'\b(?:totals?|how much|volume|spent)\b', q):
-        if 'today' in q:
-            return 'period', 'today'
-        if re.search(r'\b(?:week|7 days|seven days)\b', q):
-            return 'period', 'last 7 days'
-        if re.search(r'\b(?:year|yesterday|all time|last month)\b', q):
-            return 'unsupported', None
-        if '30 days' in q:
-            return 'period', 'last 30 days'
-        return 'period', 'this month'
+        ranges = {
+            'today': r'\btoday\b',
+            'last 7 days': r'\b(?:(?:last|past)\s+)?(?:7|seven)\s+days\b',
+            'last 30 days': r'\b(?:(?:last|past)\s+)?(?:30|thirty)\s+days\b',
+            'this month': r'\bthis month\b',
+        }
+        selected = [period for period, pattern in ranges.items() if re.search(pattern, q)]
+        remaining = q
+        for pattern in ranges.values():
+            remaining = re.sub(pattern, '', remaining)
+        # Never silently reinterpret an explicit calendar week or other interval.
+        temporal = (r'\b(?:yesterday|tomorrow|days?|weeks?|months?|years?|quarters?|hours?|'
+                    r'all time|since|between|before|after|january|february|march|april|may|june|'
+                    r'july|august|september|october|november|december|monday|tuesday|wednesday|'
+                    r'thursday|friday|saturday|sunday)\b|\b\d{1,4}[-/]\d{1,2}|\b\d{4}\b')
+        if len(selected) > 1 or re.search(temporal, remaining):
+            return 'period_help', None
+        return 'period', selected[0] if selected else 'this month'
     if re.search(r'\b(?:lookup|look up|specific|find|receipt)\b', q):
         return 'lookup', None
     if re.search(r'\b(?:transactions?|transfers?|activity|payments?)\b', q):
@@ -73,7 +83,17 @@ def balance_facts(accounts, question):
              'balance': money(a['balance_cents'])} for a in accounts]
     personal = sum(a['balance_cents'] for a in accounts if a['holder_count'] == 1)
     joint = sum(a['balance_cents'] for a in accounts if a['holder_count'] > 1)
-    matched = [r for r in rows if r['label'].casefold() in question]
+    # Prefer the longest label within overlapping spans, but keep separately
+    # named accounts (e.g. "Savings and Vacation Savings").
+    question = question.casefold()
+    matches = {(m.start(), m.end(), r['label'].casefold()) for r in rows
+               for m in re.finditer(r'(?<!\w)' + re.escape(r['label'].casefold()) + r'(?!\w)', question)}
+    chosen = []
+    for match in sorted(matches, key=lambda m: (-(m[1]-m[0]), m[0])):
+        if not any(match[0] < other[1] and other[0] < match[1] for other in chosen):
+            chosen.append(match)
+    labels = {m[2] for m in chosen}
+    matched = [r for r in rows if r['label'].casefold() in labels]
     return {'total': money(personal + joint), 'personal': money(personal), 'joint': money(joint),
             'accounts': matched or rows, 'specific_account': bool(matched)}
 

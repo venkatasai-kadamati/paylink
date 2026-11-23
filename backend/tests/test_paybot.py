@@ -74,3 +74,26 @@ def test_bedrock_gets_fixed_read_only_tool_data_and_falls_back(monkeypatch):
     result = calls[1].kwargs['messages'][-1]['content'][0]['toolResult']
     assert result['toolUseId'] == 'tool-1' and result['content'][0]['json']['facts'] == facts
     assert 'Today: sent $12.34, received $0.00' in provider.answer('Today totals', 'period', facts)
+    assert not provider.used_bedrock
+
+
+def test_period_totals_do_not_silently_reinterpret_calendar_ranges():
+    for question in ('How much did I send last week?', 'Totals last 90 days',
+                     'How much spent in October?', 'Totals since 2026-10-01',
+                     'Totals this week', 'Totals today and last 7 days'):
+        assert paybot.understand(question) == ('period_help', None)
+    for question, period in [('Totals today', 'today'), ('Totals past seven days', 'last 7 days'),
+                             ('Totals last 30 days', 'last 30 days'), ('How much this month?', 'this month'),
+                             ('How much did I send?', 'this month')]:
+        assert paybot.understand(question) == ('period', period)
+
+
+def test_named_balance_matches_longest_overlaps_and_independent_accounts():
+    accounts = [{'label': label, 'holder_count': 1, 'balance_cents': 10000}
+                for label in ('Savings', 'Vacation Savings', 'Checking')]
+    def labels(question):
+        return [a['label'] for a in paybot.balance_facts(accounts, question)['accounts']]
+    assert labels('What is my Vacation Savings balance?') == ['Vacation Savings']
+    assert labels('Savings and Vacation Savings balances') == ['Savings', 'Vacation Savings']
+    assert labels('My checking balance') == ['Checking']
+    assert labels('All my balances') == ['Savings', 'Vacation Savings', 'Checking']
