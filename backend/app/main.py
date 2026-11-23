@@ -105,6 +105,20 @@ class AccountCreate(BaseModel):
 class HolderCreate(BaseModel):
     username: str = Field(pattern=r'^[a-z][a-z0-9_]{2,29}$')
 
+class InvitationDecision(BaseModel):
+    decision: Literal['accepted','declined','cancelled']
+
+class ReversalCreate(BaseModel):
+    reason: str = Field(min_length=1, max_length=140)
+    idempotency_key: UUID
+
+    @field_validator('reason')
+    @classmethod
+    def nonblank_reason(cls, value):
+        if not value.strip():
+            raise ValueError('Enter a reason')
+        return value.strip()
+
 class TransferCreate(BaseModel):
     source_account_id: UUID
     destination_account_id: UUID
@@ -240,6 +254,16 @@ def add_holder(account_id: UUID, body: HolderCreate, user: User):
     except errors.RaiseException as e:
         raise HTTPException(409, e.diag.message_primary)
 
+@app.get('/api/accounts/{account_id}/holders')
+def account_owners(account_id:UUID,user:User):
+    with pool.connection() as c:
+        if not c.execute('SELECT 1 FROM paylink.account_holders WHERE account_id=%s AND user_id=%s',
+                         (account_id,user['id'])).fetchone():
+            raise HTTPException(404,'Account not found')
+        return c.execute('''SELECT u.full_name,u.username,h.joined_at FROM paylink.account_holders h
+          JOIN paylink.users u ON u.id=h.user_id WHERE h.account_id=%s ORDER BY h.joined_at,u.id''',
+                         (account_id,)).fetchall()
+
 @app.post('/api/transfers',status_code=201)
 def send(body:TransferCreate,user:User):
     try:
@@ -248,6 +272,49 @@ def send(body:TransferCreate,user:User):
                 (user['id'],body.source_account_id,body.destination_account_id,body.amount_cents,body.memo,body.idempotency_key)).fetchone()
     except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
     except errors.CheckViolation: raise HTTPException(409,'Transfer exceeds an account limit')
+
+@app.get('/api/account-invitations')
+def invitations(user:User):
+    with pool.connection() as c:
+        return c.execute('''SELECT i.*,a.label AS account_label,b.name AS bank_name,
+          sender.full_name AS inviter_name,sender.username AS inviter_username,
+          recipient.full_name AS invitee_name,recipient.username AS invitee_username
+          FROM paylink.list_account_invitations(%s) i
+          JOIN paylink.bank_accounts a ON a.id=i.account_id JOIN paylink.banks b ON b.id=a.bank_id
+          JOIN paylink.users sender ON sender.id=i.inviter_id
+          JOIN paylink.users recipient ON recipient.id=i.invitee_id''', (user['id'],)).fetchall()
+
+@app.post('/api/accounts/{account_id}/invitations',status_code=201)
+def invite(account_id:UUID,body:HolderCreate,user:User):
+    try:
+        with pool.connection() as c:
+            return c.execute('SELECT * FROM paylink.send_account_invitation(%s,%s,%s)',
+                             (user['id'],account_id,body.username)).fetchone()
+    except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
+
+@app.post('/api/account-invitations/{invitation_id}/decision')
+def decide_invitation(invitation_id:UUID,body:InvitationDecision,user:User):
+    try:
+        with pool.connection() as c:
+            return c.execute('SELECT * FROM paylink.decide_account_invitation(%s,%s,%s)',
+                             (user['id'],invitation_id,body.decision)).fetchone()
+    except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
+
+@app.post('/api/transfers/{transfer_id}/reversal',status_code=201)
+def reverse_transfer(transfer_id:UUID,body:ReversalCreate,user:User):
+    try:
+        with pool.connection() as c:
+            return c.execute('SELECT * FROM paylink.reverse_transfer(%s,%s,%s,%s)',
+                             (user['id'],transfer_id,body.reason,body.idempotency_key)).fetchone()
+    except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
+    except errors.CheckViolation: raise HTTPException(409,'Transfer exceeds an account limit')
+
+@app.get('/api/transfers/{transfer_id}/detail')
+def transfer_detail(transfer_id:UUID,user:User):
+    with pool.connection() as c:
+        row = c.execute('SELECT * FROM paylink.transfer_detail(%s,%s)', (user['id'],transfer_id)).fetchone()
+    if row is None: raise HTTPException(404,'Transfer not found')
+    return row
 
 HISTORY_SQL = '''WITH mine AS (SELECT account_id FROM paylink.account_holders WHERE user_id=%s),
  candidates AS (
@@ -327,11 +394,13 @@ def ask_paybot(body: paybot.PayBotQuestion, user: User):
         else:
             rows = conn.execute(HISTORY_SQL, (uid,)).fetchall()
             facts = paybot.counterparty_facts(rows) if kind == 'counterparties' else [paybot.transfer_facts(row, tz) for row in rows[:5]]
-    answer = paybot.provider().answer(body.question, kind, facts)
+    engine = paybot.provider()
+    answer = engine.answer(body.question, kind, facts)
     display = paybot.answer_display(kind, facts)
     if display and answer != paybot.LocalProvider().answer(body.question, kind, facts):
         display['summary'] = answer
-    return {'answer': answer, 'display': display}
+    return {'answer': answer, 'display': display,
+            'provider': 'bedrock' if getattr(engine, 'used_bedrock', False) else 'local'}
 
 @app.get('/api/activity.csv')
 def export(user:User):

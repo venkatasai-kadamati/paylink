@@ -115,8 +115,40 @@ def test_registered_workflow_authorization_insights_csv():
             assert len(export)==2 and all(x['memo']=="'=1+1" for x in export)
             assert c.post('/api/auth/logout').status_code==200
             assert c.post('/api/auth/login',json={'username':name+'@test.dev','password':'Test!workflow2026'}).status_code==200
+            owners=c.get(f'/api/accounts/{a}/holders')
+            assert owners.status_code==200
+            assert owners.json()[0]['username']==name
+            assert 'email' not in owners.json()[0]
+            assert d.get(f'/api/accounts/{a}/holders').status_code==404
+            invite=c.post(f'/api/accounts/{a}/invitations',json={'username':other})
+            assert invite.status_code==201,invite.text
+            invite_id=invite.json()['id']
+            invitation=d.get('/api/account-invitations').json()[0]
+            assert invitation['status']=='pending'
+            assert invitation['account_label']=='Checking'
+            assert invitation['inviter_username']==name
+            assert invitation['invitee_username']==other
+            path=f'/api/account-invitations/{invite_id}/decision'
+            assert c.post(path,json={'decision':'accepted'}).status_code==409
+            assert d.post(path,json={'decision':'accepted'}).json()['decision']=='accepted'
+            assert any(x['id']==a for x in d.get('/api/accounts').json())
+            original=r.json()['id']
+            path=f'/api/transfers/{original}/reversal'
+            reversal_body={'reason':'Duplicate payment','idempotency_key':str(uuid4())}
+            # a is joint now, but only the holder of the credited dest account may return it.
+            assert c.post(path,json=reversal_body).status_code==409
+            assert d.post(path,json={**reversal_body,'reason':'   '}).status_code==422
+            reversal=d.post(path,json=reversal_body)
+            assert reversal.status_code==201,reversal.text
+            assert d.post(path,json=reversal_body).json()==reversal.json()
+            detail=c.get(f'/api/transfers/{original}/detail').json()
+            assert detail['reversal']==reversal.json()
+            assert [p['delta_cents'] for p in detail['postings']]==[-1234,1234]
     finally:
         with psycopg.connect(C['ADMIN_DATABASE_URL']) as conn:
+            conn.execute('DELETE FROM paylink.account_invitations WHERE inviter_id=ANY(%s::uuid[])',(ids,))
+            conn.execute('DELETE FROM paylink.transfer_reversals WHERE original_transfer_id IN (SELECT id FROM paylink.transfers WHERE initiated_by=ANY(%s::uuid[]))',(ids,))
+            conn.execute('DELETE FROM paylink.transfer_postings WHERE transfer_id IN (SELECT id FROM paylink.transfers WHERE initiated_by=ANY(%s::uuid[]))',(ids,))
             conn.execute('DELETE FROM paylink.transfers WHERE initiated_by=ANY(%s::uuid[])',(ids,))
             conn.execute('DELETE FROM paylink.account_holders WHERE user_id=ANY(%s::uuid[])',(ids,))
             conn.execute('DELETE FROM paylink.bank_accounts WHERE id=ANY(%s::uuid[])',(account_ids+starter_ids,))

@@ -22,7 +22,7 @@ class PayBotQuestion(BaseModel):
 
 GUIDES = {
     'send_help': 'On Overview, select Send money. Find the recipient by exact username, email, or phone, then select their account. Choose your source account, enter the amount, and review before confirming.',
-    'joint_help': 'On Accounts, select Add joint owner. Choose the account and enter the person’s exact PayLink username. Once you confirm, both owners can see and spend the shared balance.',
+    'joint_help': 'On Accounts, select Add joint owner. Choose the account and enter the person’s exact PayLink username. They must accept in Invitations before both owners can see and spend the shared balance. Invitations expire after seven days and can be cancelled before acceptance.',
     'csv_help': 'Open Activity and select Export CSV. The file contains your latest 200 transfers, including the amount, direction, and note. Search and filters do not change the export.',
     'unsupported': 'I can explain your balances, transfers, period totals, and top counterparties, or help with sending money, joint owners, and CSV exports. I can’t make transfers or change your accounts.',
 }
@@ -161,6 +161,7 @@ class LocalProvider:
 class BedrockProvider:
     def __init__(self, client, model):
         self.client, self.model = client, model
+        self.used_bedrock = False
 
     def answer(self, question, kind, facts):
         fallback = LocalProvider().answer(question, kind, facts)
@@ -189,6 +190,7 @@ class BedrockProvider:
             if answer['stopReason'] != 'end_turn':
                 return fallback
             text = '\n'.join(block['text'] for block in answer['output']['message']['content'] if 'text' in block)
+            self.used_bedrock = bool(text.strip())
             return text.strip() or fallback
         except (KeyError, ValueError, TypeError):
             return fallback
