@@ -37,17 +37,70 @@ Phone is optional. PostgreSQL's normal UNIQUE semantics permit multiple NULLs, s
 
 Amounts use integer cents to exclude floating-point rounding. The maximum balance is below JavaScript's exact-integer limit. All accounts are USD, so no account currency or exchange-rate FD is introduced. Money is formatted only at the presentation boundary.
 
-## Functional dependencies and candidate keys
+## Professor feedback: constraints and normalization
 
-Use U=user_id, A=account_id, B=bank_id, T=transfer_id, K=idempotency_key.
+From the [professor feedback notes](../documentation/requirements/advanced%20database/feedback%20from%20professor/feedback.md), verbatim:
 
-- Users: `U → username, email, phone, full_name, password_hash, created_at`; `username → U`; `email → U`. U, username, and email are candidate keys under the stated case-normalization rules. Non-null phone determines U only conditionally.
-- Banks: `B → routing_number, name`; `routing_number → B`. B and routing_number are candidate keys.
-- Accounts: `A → B, account_number, account_type, label, balance_cents, opening_balance_cents, active, created_at`; `(B, account_number) → A`. These are the candidate keys. An account number alone does not identify an account.
-- Holders: `(U,A) → joined_at`. Neither U nor A alone identifies an ownership row; there is no partial dependency.
-- Transfers: `T → initiated_by, source_account_id, destination_account_id, amount_cents, memo, idempotency_key, created_at`; `(initiated_by,K) → T`. The key is scoped to the initiator, not globally to K.
+> 3. contraints applied
 
-These are the intended dependencies. We do not infer extra FDs from a small seed sample, such as “bank name determines bank” or “one user always uses one bank.”
+> 5. what level of normailziation is done and what speciic considerations are done
+
+### Item 3: constraints and why they exist
+
+**Primary keys.** `users`, `banks`, `bank_accounts`, and `transfers` each have an `id` UUID primary key, defaulted with `gen_random_uuid()`. These are stable identities independent of business identifiers or display names. The `account_holders` primary key is `(user_id, account_id)`: it prevents duplicate membership while allowing several users per account and several accounts per user.
+
+**Foreign keys.** All six are non-null and non-deferrable, with the default `ON DELETE NO ACTION` and `ON UPDATE NO ACTION`. A referenced row cannot be deleted, or its referenced key changed, while dependent rows still reference it; there is no cascade or nulling. This prevents orphaned accounts, ownership rows, and transfer history.
+
+| Foreign key | Why |
+|---|---|
+| `bank_accounts.bank_id → banks.id` | Every account must identify its bank. |
+| `account_holders.user_id → users.id` and `account_holders.account_id → bank_accounts.id` | Both endpoints of an ownership relationship must exist. |
+| `transfers.initiated_by → users.id` | Every completed transfer records a real profile in this simulation as its initiator. |
+| `transfers.source_account_id → bank_accounts.id` and `transfers.destination_account_id → bank_accounts.id` | Both legs of the recorded movement must retain a valid account reference. |
+
+**UNIQUE and CHECK constraints.** Checks enforce the stored domain regardless of input validation in the API. They do not verify real-world email, phone, routing, or account details.
+
+| Table | UNIQUE (beyond the primary key) and why | CHECK and why |
+|---|---|---|
+| `users` | `username`, `email`, and `phone` each unique for unambiguous lookup; multiple NULL phones are allowed. | `username` matches `^[a-z][a-z0-9_]{2,29}$` for canonical usernames. `email` equals its lowercase form and matches `^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$` for a canonical, email-shaped lookup value. `phone` may be NULL or must match `^\+[1-9][0-9]{7,14}$` for a consistent international-style format. `full_name` is 1–80 characters for a bounded display name. |
+| `banks` | `routing_number` is globally unique in the simulation; bank names need not be. | `routing_number` is exactly nine ASCII digits for a uniform identifier; text preserves leading zeros. |
+| `bank_accounts` | `(bank_id, account_number)` prevents duplicate numbers *within* a bank without imposing global uniqueness. | `account_number` is exactly 12 ASCII digits for a fixed-width synthetic identifier; `account_type` is `checking` or `savings` for the supported product types; `label` is 1–60 characters for a bounded shared display label. Both cent balances are independently bounded from 0 to 900,000,000,000,000 inclusive, excluding negative funding/balances and keeping values below JavaScript's exact-integer limit. |
+| `account_holders` | None; the composite PK already prevents duplicate pairs. | None; existence and membership identity come from the FKs and PK. |
+| `transfers` | `(initiated_by, idempotency_key)` permits only one completed transfer per initiator/key pair; different initiators can use the same key. | `amount_cents` is 1–100,000,000 inclusive to require a positive, capped movement; `memo` is at most 140 characters for a bounded note (empty is valid); source and destination differ so a transfer records movement between accounts. |
+
+**NOT NULL and defaults.** Every column except `users.phone` is non-null. Beyond keys and relationships, `users` requires the login identifiers, display name, credential hash, and creation time (the API hashes credentials; there is no SQL hash-format check). `banks` requires a routing number and display name. `bank_accounts` requires a number, type, label, both balances, active flag, and creation time, so account identity, simulated funds, availability, and opening context are always known. `account_holders.joined_at` records when access was added. `transfers` requires an amount, memo, idempotency key, and creation time as well as the participants, so every completed event has its movement, retry identity, and time recorded.
+
+`created_at` on users, accounts, and transfers and `joined_at` on holders default to `now()`, PostgreSQL's transaction timestamp. Accounts default both cent balances to 20,000 ($200 of simulated funding) and `active` to true. `transfers.memo` defaults to the empty string rather than NULL. Apart from those defaults and generated IDs, callers supply the required values.
+
+**Row-level security and grants.** All five tables enable RLS, but do not force it on table owners. Each has a permissive `backend_read` policy (`SELECT TO paylink_api USING (true)`), and only `users` has `backend_register` (`INSERT TO paylink_api WITH CHECK (true)`). The backend role has schema `USAGE`, `SELECT` on all five tables, `INSERT` on `users` only, and `EXECUTE` on the three routines below. It cannot directly update or delete domain rows or insert accounts, holders, or transfers. These policies isolate the service role, not individual customers: application queries and the routines enforce customer access. Hosted `anon` and `authenticated`, like `PUBLIC`, have no schema usage or domain table grants. The routines are `SECURITY DEFINER` with a fixed `pg_catalog, paylink` search path and no `PUBLIC` execute grant, so the backend can perform controlled writes without direct write privileges.
+
+**Triggers.** There are no application-defined triggers; PostgreSQL's internal referential-integrity triggers enforce the foreign keys. Balance updates and ownership rules are implemented in routines, not triggers.
+
+**Transaction rules.** The backend uses PostgreSQL's default `READ COMMITTED` isolation (no override) with explicit locks held through transaction end. The connection context commits before success is returned and rolls back on failure.
+
+| Routine | Rule and rationale |
+|---|---|
+| `execute_transfer` | Rejects missing or invalid inputs. First takes a transaction advisory lock derived from actor and key; a retry with the same source, destination, amount, and memo returns the prior row without moving money, while changed details are rejected. For a new transfer, checks source ownership, then locks both account rows `FOR UPDATE` in ascending UUID order so opposing transfers acquire the same locks in the same order. Both accounts must exist and be active; the locked source balance must cover the amount. Debit, credit, and the completed transfer insert are atomic. If a later check fails (e.g., the destination balance would exceed its cap), the debit rolls back too. |
+| `open_account` | Locks the actor's user row `FOR NO KEY UPDATE`, checks that the user exists and holds fewer than four accounts, then inserts the funded account and first holder together. This serializes the account limit for that user and prevents partial account creation. Opening is not idempotent: a successful repeat can open another account until the cap is reached. Registration calls it in the same transaction as inserting the profile. |
+| `add_account_holder` | Looks up the target by exact username and locks that user `FOR NO KEY UPDATE` before locking the active account `FOR UPDATE`. The actor must already own the account. If the pair already exists, it returns the target without inserting again; otherwise it checks the target's same four-account cap and inserts only the membership. The user lock serializes grants against openings for that target without conflicting with the `KEY SHARE` lock a transfer's initiator FK needs. |
+
+The four-account cap, the presence of a first holder, source ownership, active status, and balance conservation are workflow rules, not global table assertions: privileged SQL outside these routines is not governed by all of them.
+
+### Item 5: normal form by relation
+
+Each relation is in **1NF** (scalar values and no repeating groups), **2NF** (no non-key attribute depends on only part of a candidate key), and **3NF** (no transitive dependence of a non-key attribute on a key through a non-key determinant). Each also reaches **BCNF** under the intended functional dependencies (FDs) below: every nontrivial determinant within a relation is a superkey. The analysis is about the design, not apparent dependencies in demo data.
+
+| Relation | Candidate keys and determinants | Highest established normal form and design consideration |
+|---|---|---|
+| `users` | `id → username, email, phone, full_name, password_hash, created_at`; `username → id`; `email → id`. Candidate keys: `id`, `username`, `email`. A present phone identifies a row, but nullable `phone` is not an unconditional key. | **BCNF**. Profile facts live once, independently of ownership or transfer rows. |
+| `banks` | `id → routing_number, name`; `routing_number → id`. Candidate keys: `id`, `routing_number`. | **BCNF**. Name does not determine bank identity, and routing/name are not copied into accounts. |
+| `bank_accounts` | `id → bank_id, account_number, account_type, label, balance_cents, opening_balance_cents, active, created_at`; `(bank_id, account_number) → id`. Candidate keys: `id`, `(bank_id, account_number)`. | **BCNF**. Neither part of the composite key alone determines account facts. All owners share one label and balance through the account, not copies in their membership rows. |
+| `account_holders` | `(user_id, account_id) → joined_at`. The pair is the only candidate key. | **BCNF**. The timestamp describes the specific membership, not the user or account alone. Separating the many-to-many relationship removes repeating owners and avoids duplicating user/account facts. |
+| `transfers` | `id → initiated_by, source_account_id, destination_account_id, amount_cents, memo, idempotency_key, created_at`; `(initiated_by, idempotency_key) → id`. Candidate keys: `id`, `(initiated_by, idempotency_key)`. | **BCNF**. Neither initiator nor key alone identifies the event. The recorded initiator is an event fact, not inferred from the current owners of the source account. |
+
+**Deliberate redundancy and historical facts.** `bank_accounts.balance_cents` is a materialized value derived from opening funds and completed transfers (see [Balance reconciliation and recovery](#balance-reconciliation-and-recovery)). Keeping it avoids summing history for every sufficiency check; atomic transfer writes maintain it. This is cross-table redundancy, not an extra intra-table FD that violates BCNF. `opening_balance_cents` is the historical starting amount, not another copy of the current balance; the same default on both columns does not make one determine the other. Transfers record event facts (amount, memo, initiator, time), but do not snapshot account labels, bank names, holder names, or balances. Display labels and names in transfer history are resolved from current related rows.
+
+**Verification.** Applied all checked-in migrations and backend role provisioning with [`scripts/migrate.py`](../scripts/migrate.py) to a local PostgreSQL instance. Compared columns/defaults, constraints, RLS flags and policies, grants, triggers, and function definitions with hosted Supabase in a read-only transaction; those checks matched. On the local instance, rollback-isolated probes exercised every PK, UNIQUE, CHECK, FK, and NOT NULL rule, including rejected parent deletes and accepted NULL phones. The backend integration tests exercised overdraft rejection, identical and conflicting retries, concurrent spending and opposite-direction transfers, joint ownership, and rollback. No negative writes were attempted against hosted Supabase.
 
 ## From an unnormalized ownership record to BCNF
 
