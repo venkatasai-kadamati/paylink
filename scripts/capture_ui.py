@@ -13,7 +13,7 @@ with sync_playwright() as p:
     expect(page.get_by_text('Everyday checking',exact=True)).to_be_visible()
     page.screenshot(path=str(ROOT/'artifacts/02-overview.png'),full_page=True)
     page.get_by_role('button',name='Insights',exact=True).click()
-    expect(page.get_by_role('heading',name='A week in motion')).to_be_visible()
+    expect(page.get_by_role('heading',name='Daily transfer volume')).to_be_visible()
     page.screenshot(path=str(ROOT/'artifacts/03-insights.png'),full_page=True)
     browser.close()
 print('Captured live sign-in, overview, and insights screenshots.')

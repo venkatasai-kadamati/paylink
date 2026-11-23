@@ -61,7 +61,7 @@ def login(page,profile):
         page.get_by_label('Password',exact=True).fill(profile['password'])
         page.get_by_role('button',name='Sign in',exact=True).click()
     expect(page.get_by_role('heading',name='Hello, '+profile['full_name'].split()[0]+'.')).to_be_visible(timeout=20000)
-    expect(page.get_by_text('Getting your workspace ready…')).not_to_be_visible()
+    expect(page.get_by_text('Loading accounts and transfers…')).not_to_be_visible()
 
 def account(page,username,label,kind='checking'):
     rows=db('''SELECT a.id FROM paylink.bank_accounts a JOIN paylink.account_holders h ON h.account_id=a.id
@@ -118,7 +118,7 @@ try:
     expect(dialog.get_by_role('alert')).to_contain_text('does not have enough funds')
     dialog.get_by_role('textbox',name='Amount',exact=True).fill('12.34')
     memo='Hosted acceptance '+uuid4().hex[:8]
-    dialog.get_by_placeholder('A little note goes a long way').fill(memo)
+    dialog.get_by_placeholder('e.g. Lunch').fill(memo)
     dialog.get_by_role('button',name='Review transfer').click()
     expect(dialog.get_by_role('heading',name='Review your transfer')).to_be_visible()
     screenshot(sai,'03-review')
@@ -163,13 +163,13 @@ try:
     dialog=sid.get_by_role('dialog');dialog.get_by_label('From account').select_option(shared)
     dialog.get_by_label('To account').select_option(dest)
     dialog.get_by_role('textbox',name='Amount',exact=True).fill('1.00')
-    dialog.get_by_placeholder('A little note goes a long way').fill('Hosted joint-owner acceptance')
+    dialog.get_by_placeholder('e.g. Lunch').fill('Hosted joint-owner acceptance')
     dialog.get_by_role('button',name='Review transfer').click();dialog.get_by_role('button',name='Confirm & send').click()
     expect(dialog.get_by_role('heading',name='Transfer completed')).to_be_visible(timeout=20000)
     dialog.get_by_role('button',name='Back to overview').click()
     record('Second owner spends shared funds through the own-account transfer UI')
     sid.get_by_role('button',name='Insights',exact=True).click()
-    expect(sid.get_by_role('heading',name='A week in motion')).to_be_visible()
+    expect(sid.get_by_role('heading',name='Daily transfer volume')).to_be_visible()
     screenshot(sid,'07-insights')
     sid.set_viewport_size({'width':390,'height':844})
     sid.get_by_role('button',name='Toggle navigation').click();sid.get_by_role('button',name='Overview',exact=True).click()
