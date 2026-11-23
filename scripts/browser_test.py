@@ -3,10 +3,11 @@ import re
 import json
 import platform
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from browser_support import launch_chromium
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 from dotenv import dotenv_values
 import psycopg
 from playwright.sync_api import sync_playwright, expect
@@ -26,13 +27,20 @@ def db(query,args=()):
 try:
  with sync_playwright() as p:
     browser=launch_chromium(p)
-    context=browser.new_context(viewport={'width':1440,'height':1100},timezone_id='America/Chicago')
+    browser_zone='Pacific/Honolulu'
+    context=browser.new_context(viewport={'width':1440,'height':1100},timezone_id=browser_zone)
     page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
     page.goto('http://localhost:3000');page.get_by_role('button',name='Sign in as Sai (User 1)').click()
     expect(page.get_by_role('heading',name='Hello, Sai.')).to_be_visible()
     expect(page.get_by_text('Everyday checking',exact=True)).to_be_visible()
+    expect(page.locator('.topbar-right')).to_contain_text('Simulated accounts')
     source=db("SELECT a.id,a.balance_cents FROM paylink.bank_accounts a JOIN paylink.account_holders h ON h.account_id=a.id JOIN paylink.users u ON u.id=h.user_id WHERE u.username='sai' AND a.label='Everyday checking'")[0]
     recipient=db("SELECT a.id,a.balance_cents FROM paylink.bank_accounts a JOIN paylink.account_holders h ON h.account_id=a.id JOIN paylink.users u ON u.id=h.user_id WHERE u.username='siddhardth' AND a.label='Everyday checking'")[0]
+    timestamp=(datetime.now(timezone.utc)-timedelta(days=2)).replace(hour=7,minute=30,second=0,microsecond=0)
+    local_day=timestamp.astimezone(ZoneInfo(browser_zone)).date()
+    assert local_day!=timestamp.astimezone(ZoneInfo('America/Chicago')).date()
+    weekly_before=page.request.get('http://localhost:3000/api/insights',params={'time_zone':browser_zone}).json()['weekly']
+    sent_before=next(day['sent'] for day in weekly_before if day['day']==local_day.isoformat())
     page.get_by_role('button',name='Send money',exact=True).click()
     dialog=page.get_by_role('dialog')
     dialog.get_by_placeholder('e.g. siddhardth').fill('siddhardth')
@@ -57,13 +65,17 @@ try:
     assert db('SELECT balance_cents FROM paylink.bank_accounts WHERE id=%s',(recipient[0],))[0][0]==recipient[1]+1234
     page.screenshot(path=str(ARTIFACTS/'05-transfer-success.png'),full_page=False)
     record('UI transfer committed: source −1234 cents, recipient +1234 cents, one history row')
+    db('UPDATE paylink.transfers SET created_at=%s WHERE id=%s',(timestamp,row[0]))
     dialog.get_by_role('button',name='Back to overview').click()
     page.reload();expect(page.get_by_role('heading',name='Hello, Sai.')).to_be_visible()
     page.get_by_role('button',name='Activity',exact=True).click()
     page.get_by_role('textbox',name='Search activity').fill('Browser validation')
     expect(page.get_by_role('button',name='Siddhardth Browser validation')).to_be_visible()
+    local_date_label=f'{local_day:%b} {local_day.day}'
+    expect(page.locator('.date-cell')).to_contain_text(local_date_label)
     page.get_by_role('button',name='Siddhardth Browser validation').click()
     expect(page.get_by_role('dialog')).to_contain_text(str(row[0]))
+    expect(page.get_by_role('dialog').get_by_text('THE LITTLE DETAILS')).to_have_count(0)
     page.screenshot(path=str(ARTIFACTS/'06-transfer-details.png'),full_page=False)
     page.get_by_role('button',name='Close dialog').click()
     with page.expect_download() as download:page.get_by_role('link',name='Export CSV').click()
@@ -78,6 +90,10 @@ try:
     page.get_by_text('View daily amounts', exact=True).click()
     expect(page.locator('.chart-data tbody tr')).to_have_count(7)
     expect(page.locator('.chart-data').get_by_role('columnheader', name='Received')).to_be_visible()
+    sent_label=f'${(sent_before+1234)/100:,.2f}'
+    expect(page.locator('.chart-data tr').filter(has=page.get_by_text(local_date_label,exact=True)).locator('td').last).to_have_text(sent_label)
+    expect(page.locator('.chart-day').filter(has_text=local_day.strftime('%a')).locator('.bar.sent')).to_have_attribute('title',f'Sent {sent_label}')
+    record('Activity, Insights chart and daily amounts use the same Honolulu date at a Chicago day boundary')
     assert any(float(bar.evaluate('el=>el.style.height.replace("px","")'))>2 for bar in page.locator('.bar').all())
     page.screenshot(path=str(ARTIFACTS/'sai-insights.png'),full_page=True)
     record('Sai history, CSV export, and seven-day insights render with data')

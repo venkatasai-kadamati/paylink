@@ -347,9 +347,10 @@ UPDATE on the target user so this FK check remains compatible. Using FOR
 UPDATE there could introduce a user/account lock cycle; a regression
 test holds a joint-owner grant open while an unrelated transfer by that
 target completes.</p>
-<p>Monthly and seven-day insights use America/Chicago calendar
-boundaries. Timestamps remain timestamptz instants and the browser
-formats them locally. Internal transfers are excluded from monthly money
+<p>Monthly and seven-day insights use the browser’s time zone, matching
+the dates shown in Activity. API callers that omit the time zone use
+America/Chicago calendar boundaries. Timestamps remain timestamptz
+instants. Internal transfers are excluded from monthly money
 in/out and included on both sides of the weekly volume chart. History
 and CSV are limited to the latest 200 rows; account totals count each
 account once per signed-in user.</p>

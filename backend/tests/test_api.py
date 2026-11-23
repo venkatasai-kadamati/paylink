@@ -39,6 +39,11 @@ def test_authentication_and_csrf():
         today=datetime.now(ZoneInfo('America/Chicago')).date()
         assert [d['day'] for d in client.get('/api/insights').json()['weekly']]==[
             (today-timedelta(days=i)).isoformat() for i in range(6,-1,-1)]
+        browser_today=datetime.now(ZoneInfo('Pacific/Honolulu')).date()
+        assert [d['day'] for d in client.get('/api/insights', params={'time_zone':'Pacific/Honolulu'}).json()['weekly']]==[
+            (browser_today-timedelta(days=i)).isoformat() for i in range(6,-1,-1)]
+        invalid_tz=client.get('/api/insights', params={'time_zone':'Unknown/Zone'})
+        assert invalid_tz.status_code==422
         import backend.app.main as main
         with main.pool.connection() as conn:
             assert conn.execute('SHOW TimeZone').fetchone()['TimeZone']=='America/Chicago'

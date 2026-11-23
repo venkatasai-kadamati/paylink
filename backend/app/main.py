@@ -13,7 +13,7 @@ import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException, Request, Response
+from fastapi import FastAPI, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from psycopg import errors
@@ -286,9 +286,16 @@ def export(user:User):
     return StreamingResponse(iter([output.getvalue()]),media_type='text/csv',
         headers={'Content-Disposition':'attachment; filename="paylink-activity.csv"'})
 
+SET_LOCAL_TIME_ZONE = "SELECT set_config('TimeZone', %s, true)"
+
 @app.get('/api/insights')
-def insights(user:User):
+def insights(user:User, time_zone: Annotated[str | None, Query(min_length=1, max_length=100)] = None):
     with pool.connection() as c:
+        if time_zone is not None:
+            try:
+                c.execute(SET_LOCAL_TIME_ZONE, (time_zone,))
+            except errors.InvalidParameterValue:
+                raise HTTPException(422, 'Unrecognized time zone') from None
         monthly=c.execute('''WITH mine AS(SELECT account_id FROM paylink.account_holders WHERE user_id=%s)
           SELECT count(*) AS transfer_count,
           coalesce(sum(amount_cents) FILTER(WHERE source_account_id IN(SELECT account_id FROM mine)
