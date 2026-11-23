@@ -193,6 +193,7 @@ finally:
             c.execute('DELETE FROM paylink.bank_accounts WHERE id=%s',(starter_id,))
         c.execute('DELETE FROM paylink.users WHERE username=%s',(username,))
     for id in transfer_ids:
+        c.execute('DELETE FROM paylink.transfer_postings WHERE transfer_id=%s',(id,))
         r=c.execute('DELETE FROM paylink.transfers WHERE id=%s RETURNING source_account_id,destination_account_id,amount_cents',(id,)).fetchone()
         if r:
             c.execute('UPDATE paylink.bank_accounts SET balance_cents=balance_cents+%s WHERE id=%s',(r[2],r[0]))

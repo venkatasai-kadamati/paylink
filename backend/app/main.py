@@ -103,6 +103,13 @@ class AccountCreate(BaseModel):
 class HolderCreate(BaseModel):
     username: str = Field(pattern=r'^[a-z][a-z0-9_]{2,29}$')
 
+class InvitationDecision(BaseModel):
+    decision: Literal['accepted','declined','cancelled']
+
+class ReversalCreate(BaseModel):
+    reason: str = Field(min_length=1, max_length=140)
+    idempotency_key: UUID
+
 class TransferCreate(BaseModel):
     source_account_id: UUID
     destination_account_id: UUID
@@ -246,6 +253,43 @@ def send(body:TransferCreate,user:User):
                 (user['id'],body.source_account_id,body.destination_account_id,body.amount_cents,body.memo,body.idempotency_key)).fetchone()
     except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
     except errors.CheckViolation: raise HTTPException(409,'Transfer exceeds an account limit')
+
+@app.get('/api/account-invitations')
+def invitations(user:User):
+    with pool.connection() as c:
+        return c.execute('SELECT * FROM paylink.list_account_invitations(%s)', (user['id'],)).fetchall()
+
+@app.post('/api/accounts/{account_id}/invitations',status_code=201)
+def invite(account_id:UUID,body:HolderCreate,user:User):
+    try:
+        with pool.connection() as c:
+            return c.execute('SELECT * FROM paylink.send_account_invitation(%s,%s,%s)',
+                             (user['id'],account_id,body.username)).fetchone()
+    except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
+
+@app.post('/api/account-invitations/{invitation_id}/decision')
+def decide_invitation(invitation_id:UUID,body:InvitationDecision,user:User):
+    try:
+        with pool.connection() as c:
+            return c.execute('SELECT * FROM paylink.decide_account_invitation(%s,%s,%s)',
+                             (user['id'],invitation_id,body.decision)).fetchone()
+    except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
+
+@app.post('/api/transfers/{transfer_id}/reversal',status_code=201)
+def reverse_transfer(transfer_id:UUID,body:ReversalCreate,user:User):
+    try:
+        with pool.connection() as c:
+            return c.execute('SELECT * FROM paylink.reverse_transfer(%s,%s,%s,%s)',
+                             (user['id'],transfer_id,body.reason.strip(),body.idempotency_key)).fetchone()
+    except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
+    except errors.CheckViolation: raise HTTPException(409,'Transfer exceeds an account limit')
+
+@app.get('/api/transfers/{transfer_id}/detail')
+def transfer_detail(transfer_id:UUID,user:User):
+    with pool.connection() as c:
+        row = c.execute('SELECT * FROM paylink.transfer_detail(%s,%s)', (user['id'],transfer_id)).fetchone()
+    if row is None: raise HTTPException(404,'Transfer not found')
+    return row
 
 HISTORY_SQL = '''WITH mine AS (SELECT account_id FROM paylink.account_holders WHERE user_id=%s),
  candidates AS (

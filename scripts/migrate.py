@@ -25,9 +25,9 @@ with psycopg.connect(config['ADMIN_DATABASE_URL']) as c:
     if not c.execute("SELECT 1 FROM pg_roles WHERE rolname='paylink_api'").fetchone():
         c.execute(sql.SQL('CREATE ROLE paylink_api LOGIN PASSWORD {}').format(sql.Literal(unquote(api.password or ''))))
     c.execute('GRANT USAGE ON SCHEMA paylink TO paylink_api')
-    c.execute('GRANT SELECT ON ALL TABLES IN SCHEMA paylink TO paylink_api')
     c.execute('GRANT INSERT ON paylink.users TO paylink_api')
     for table in ('users','banks','bank_accounts','account_holders','transfers'):
+        c.execute(sql.SQL('GRANT SELECT ON paylink.{} TO paylink_api').format(sql.Identifier(table)))
         if not c.execute('SELECT 1 FROM pg_policies WHERE schemaname=%s AND tablename=%s AND policyname=%s',('paylink',table,'backend_read')).fetchone():
             c.execute(sql.SQL('CREATE POLICY backend_read ON paylink.{} FOR SELECT TO paylink_api USING (true)').format(sql.Identifier(table)))
     if not c.execute("SELECT 1 FROM pg_policies WHERE schemaname='paylink' AND tablename='users' AND policyname='backend_register'").fetchone():
@@ -35,4 +35,7 @@ with psycopg.connect(config['ADMIN_DATABASE_URL']) as c:
     c.execute('GRANT EXECUTE ON FUNCTION paylink.execute_transfer(uuid,uuid,uuid,bigint,text,uuid) TO paylink_api')
     c.execute('GRANT EXECUTE ON FUNCTION paylink.open_account(uuid,uuid,text,text) TO paylink_api')
     c.execute('GRANT EXECUTE ON FUNCTION paylink.add_account_holder(uuid,uuid,text) TO paylink_api')
+    c.execute('''GRANT EXECUTE ON FUNCTION paylink.send_account_invitation(uuid,uuid,text),
+                 paylink.decide_account_invitation(uuid,uuid,text),paylink.list_account_invitations(uuid),
+                 paylink.reverse_transfer(uuid,uuid,text,uuid),paylink.transfer_detail(uuid,uuid) TO paylink_api''')
 print('Migrations applied; backend role has read/registration and controlled function access. No direct balance updates.')
