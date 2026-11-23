@@ -8,7 +8,23 @@ const suggestions = [
   'Top counterparties', 'Look up a transfer', 'How do I export CSV?',
 ];
 
-type Message = { speaker: 'You' | 'PayBot'; text: string };
+type AnswerDisplay = {
+  heading?: string;
+  rows: { label: string; value: string; detail?: string }[];
+  note?: string;
+  summary?: string;
+};
+type Message = { speaker: 'You' | 'PayBot'; text: string; display?: AnswerDisplay | null };
+
+function Answer({display}: {display: AnswerDisplay}) {
+  return <>
+    {display.heading && <p>{display.heading}</p>}
+    <dl className="paybot-rows">{display.rows.map(({label, value, detail}, index) =>
+      <div key={index}><dt>{label}{detail && <small>{detail}</small>}</dt><dd>{value}</dd></div>)}</dl>
+    {display.note && <p><small>{display.note}</small></p>}
+    {display.summary && <p>{display.summary}</p>}
+  </>;
+}
 
 export function PayBot({open, onClose}:{open: boolean; onClose: () => void}) {
   const panel = useRef<HTMLDialogElement>(null);
@@ -55,8 +71,8 @@ export function PayBot({open, onClose}:{open: boolean; onClose: () => void}) {
         setQuestion(text);
         return;
       }
-      const {answer} = await response.json() as {answer: string};
-      setMessages(items => [...items, {speaker: 'PayBot', text: answer}]);
+      const {answer, display} = await response.json() as {answer: string; display?: AnswerDisplay | null};
+      setMessages(items => [...items, {speaker: 'PayBot', text: answer, display}]);
     } catch {
       setError('Could not reach PayBot. Check your connection and try again.');
       setQuestion(text);
@@ -75,7 +91,9 @@ export function PayBot({open, onClose}:{open: boolean; onClose: () => void}) {
         {suggestions.map(prompt => <button key={prompt} onClick={() => {void ask(prompt); input.current?.focus();}}>{prompt}</button>)}
       </div>}
       <div role="log" aria-label="PayBot conversation" aria-live="polite">
-        {messages.map(({speaker,text}, index) => <div className="paybot-message" key={index}><strong>{speaker}</strong><p>{text}</p></div>)}
+        {messages.map(({speaker,text,display}, index) => <div className="paybot-message" key={index}><strong>{speaker}</strong>
+          {display ? <Answer display={display}/> : <p>{text}</p>}
+        </div>)}
       </div>
       {waiting && <p role="status">Looking up your answer…</p>}
       {error && <p className="error" role="alert">{error}</p>}

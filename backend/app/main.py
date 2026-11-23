@@ -327,7 +327,11 @@ def ask_paybot(body: paybot.PayBotQuestion, user: User):
         else:
             rows = conn.execute(HISTORY_SQL, (uid,)).fetchall()
             facts = paybot.counterparty_facts(rows) if kind == 'counterparties' else [paybot.transfer_facts(row, tz) for row in rows[:5]]
-    return {'answer': paybot.provider().answer(body.question, kind, facts)}
+    answer = paybot.provider().answer(body.question, kind, facts)
+    display = paybot.answer_display(kind, facts)
+    if display and answer != paybot.LocalProvider().answer(body.question, kind, facts):
+        display['summary'] = answer
+    return {'answer': answer, 'display': display}
 
 @app.get('/api/activity.csv')
 def export(user:User):

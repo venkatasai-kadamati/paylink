@@ -12,7 +12,7 @@
   --radius: 6px;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--font-sans), sans-serif; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--font-sans), sans-serif; font-variant-numeric: tabular-nums; }
 button, input, select { font: inherit; }
 button { color: inherit; cursor: pointer; border: 0; background: none; }
 button:disabled { cursor: not-allowed; opacity: .65; }
@@ -90,7 +90,7 @@ input::placeholder { color: var(--muted); }
 .metric-card + .metric-card { border-top: 1px solid var(--line); }
 .metric-label { font-size: 13px; color: var(--muted); }
 .metric-card > strong { font-size: 16px; font-weight: 500; }
-.balance-value, .metric-card > strong, .account-balance, .amount, .review-amount, .receipt-amount, .overview-summary strong, .monthly-flow dd, .transfer-available, .amount-input, .chart-data :is(th,td):not(:first-child) { font-family: var(--font-figures), monospace; font-variant-numeric: tabular-nums; text-align: right; }
+.balance-value, .metric-card > strong, .account-balance, .amount, .review-amount, .receipt-amount, .overview-summary strong, .monthly-flow dd, .transfer-available, .amount-input, .chart-data :is(th,td):not(:first-child) { text-align: right; }
 
 .quick-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; padding: 11px 0; margin: 8px 0 21px; border-bottom: 1px solid var(--line); }
 .quick-actions > button { display: inline-flex; align-items: center; gap: 7px; min-height: 35px; padding: 4px; font-size: 13px; color: var(--accent); }
@@ -146,6 +146,14 @@ tbody tr { cursor: pointer; }
 
 .insights-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; gap: 18px; margin-top: 24px; }
 .panel { min-width: 0; padding: 17px 19px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.chart-panel .section-heading { flex-wrap: wrap; gap: 10px; }
+.chart-range { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius); }
+.chart-range button { min-height: 34px; padding: 4px 10px; border-radius: 4px; white-space: nowrap; font-size: 13px; color: var(--muted); }
+.chart-range button:hover, .chart-range button[aria-pressed="true"] { background: var(--tint); color: var(--accent-deep); }
+.chart-range button[aria-pressed="true"] { font-weight: 650; }
+.chart-empty { margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); }
+.chart-empty p { color: var(--muted); font-size: 13px; }
+.chart-empty p + p { margin-top: 4px; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 15px; margin: 10px 0; font-size: 13px; color: var(--muted); }
 .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .chart-legend i { width: 10px; height: 10px; }
@@ -153,7 +161,7 @@ tbody tr { cursor: pointer; }
 .chart-legend .out, .bar.sent { background: #8a9bae; }
 .bar-chart { position: relative; display: flex; align-items: flex-end; justify-content: space-around; border-bottom: 1px solid var(--line); }
 .chart-day { min-width: 0; flex: 1; text-align: center; font-size: 11px; color: var(--muted); }
-.chart-day > span { display: block; padding: 6px 0; border-top: 1px solid var(--line); }
+.chart-day > span { display: block; height: 30px; padding: 6px 0; border-top: 1px solid var(--line); white-space: nowrap; }
 .bars { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 114px; }
 .bar { width: min(22px, 33%); }
 .chart-note { color: var(--muted); font-size: 13px; }
@@ -276,8 +284,7 @@ tbody tr { cursor: pointer; }
 .overview-summary strong { color: var(--ink); font-size: 20px; font-weight: 500; }
 .dashboard[data-page="Accounts"] .accounts-section, .dashboard[data-page="Balance"] .accounts-section { max-width: 780px; }
 .account-row strong { font-weight: 500; }
-.period-label, .chart-empty, .auth-disclaimer { color: var(--muted); font-size: 13px; }
-.chart-empty { position: absolute; inset: 42px 0 auto; text-align: center; }
+.auth-disclaimer { color: var(--muted); font-size: 13px; }
 .monthly-flow { padding: 12px 0; }
 .monthly-flow dl { margin: 8px 0 0; }
 .monthly-flow dl > div { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -299,6 +306,12 @@ tbody tr { cursor: pointer; }
 .paybot-prompts button:hover { background: var(--tint); }
 .paybot-message { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .paybot-message p { margin-top: 3px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.paybot-rows { margin: 5px 0 0; font-size: 14px; }
+.paybot-rows > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 5px 0; }
+.paybot-rows > div + div { border-top: 1px solid var(--line); }
+.paybot-rows dt { overflow-wrap: anywhere; }
+.paybot-rows dd { margin: 0; text-align: right; font-weight: 650; }
+.paybot-rows small { display: block; color: var(--muted); }
 .paybot-panel > form { padding: 14px 20px max(16px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
 .paybot-panel form > div { display: flex; gap: 8px; }
 .paybot-panel input { min-width: 0; flex: 1; }

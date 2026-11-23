@@ -23,12 +23,19 @@ def test_paybot_is_scoped_to_the_signed_in_user_and_cannot_write(monkeypatch):
             assert c.post('/api/paybot', json={'question': ' '}).status_code == 422
             assert c.post('/api/paybot', json={'question': 'Today totals', 'time_zone': 'Unknown/Zone'}).status_code == 422
             assert c.post('/api/paybot', json={'question': 'Balances'}, headers={'Origin': 'https://other.example'}).status_code == 403
-            balance = ask('Show my balances')
+            balance_response = c.post('/api/paybot', json={'question': 'Show my balances'})
+            assert balance_response.status_code == 200
+            balance_payload = balance_response.json()
+            balance = balance_payload['answer']
             assert f"Total balance: {paybot.money(sum(a['balance_cents'] for a in accounts))}" in balance
             assert 'Personal:' in balance and 'Joint:' in balance
             assert 'Rainy day fund (Personal):' in ask('What is my Rainy day fund balance?')
             assert all(a['label'] in balance for a in accounts)
             assert all(a['last4'] not in balance for a in accounts)
+            assert balance_payload['display']['rows'][0] == {
+                'label': 'Total balance', 'value': paybot.money(sum(a['balance_cents'] for a in accounts)),
+            }
+            assert {row['label'] for row in balance_payload['display']['rows'][3:]} == {a['label'] for a in accounts}
             assert 'Last 7 days: sent' in ask('Totals last 7 days', time_zone='Pacific/Honolulu')
             assert 'by number of transfers' in ask('Top counterparties')
             assert ask('Recent transfers').count('\n') == min(len(history), 5) - 1

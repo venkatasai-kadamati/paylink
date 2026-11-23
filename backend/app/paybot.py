@@ -102,6 +102,34 @@ def period_start(now, period):
     }[period]
 
 
+def answer_display(kind, facts):
+    if not facts:
+        return None
+    if kind == 'balances':
+        rows = [] if facts['specific_account'] else [
+            {'label': label, 'value': facts[key]}
+            for label, key in [('Total balance', 'total'), ('Personal', 'personal'), ('Joint', 'joint')]
+        ]
+        rows.extend({'label': a['label'], 'value': a['balance'], 'detail': a['ownership']} for a in facts['accounts'])
+        return {'rows': rows}
+    if kind in ('recent', 'lookup'):
+        return {'rows': [
+            {'label': t['counterparty'], 'value': t['amount'],
+             'detail': f"{t['direction'].capitalize()} · {t['date']}"}
+            for t in facts
+        ]}
+    if kind == 'period':
+        return {'heading': facts['period'].capitalize(), 'rows': [
+            {'label': label, 'value': facts[label.lower()]} for label in ('Sent', 'Received')
+        ], 'note': 'Transfers between your accounts aren’t included.'}
+    if kind == 'counterparties':
+        return {'heading': 'Top counterparties', 'rows': [
+            {'label': r['name'], 'value': f"{r['count']} {'transfer' if r['count'] == 1 else 'transfers'}"}
+            for r in facts
+        ], 'note': 'Ranked by transfer count in your latest 200 activity entries.'}
+    return None
+
+
 class Provider(Protocol):
     def answer(self, question: str, kind: str, facts) -> str: ...
 

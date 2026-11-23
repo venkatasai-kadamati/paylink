@@ -7,7 +7,8 @@ type User={id:string;username:string;full_name:string;email:string;phone:string|
 type Account={id:string;label:string;account_type:string;balance_cents:number;active:boolean;last4:string;bank_name:string;holder_count:number};
 type Transfer={id:string;amount_cents:number;memo:string;created_at:string;direction:'sent'|'received'|'internal';source_label:string;destination_label:string;counterparty:string};
 type Recipient={id:string;username:string;full_name:string;account_id:string;bank_name:string;last4:string;account_type?:string;holder_count?:number};
-type Insights={monthly:{transfer_count:number;sent_cents:number;received_cents:number};weekly:{day:string;sent:number;received:number}[]};
+type DailyVolume={day:string;sent:number;received:number};
+type Insights={monthly:{transfer_count:number;sent_cents:number;received_cents:number};weekly:DailyVolume[]};
 const DEMO_ENABLED=process.env.NEXT_PUBLIC_DEMO_ENABLED==='true';
 const money=(n:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n/100);
 const date=(s:string)=>new Date(s).toLocaleDateString('en-US',{month:'short',day:'numeric'});
@@ -21,6 +22,65 @@ function Logo(){return <div className="logo"><span className="logo-mark"><ArrowL
 const ownership=(count:number)=>count>1?'Joint':'Personal';
 function AccountTag({count}:{count:number}){return <span className={'ownership-tag '+(count>1?'joint':'personal')}>{ownership(count)}</span>}
 function Spinner(){return <LoaderCircle size={18} className="spin" aria-label="Loading"/>}
+
+function localDay(value:Date){
+ return `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;
+}
+
+function InsightChart({insights,transfers}:{insights:Insights|null;transfers:Transfer[]}){
+ const [range,setRange]=useState<7|30>(7);
+ const weekly=insights?.weekly??[];
+ const older:DailyVolume[]=[];
+ const today=weekly.at(-1)?.day;
+ if(range===30&&today){
+  const buckets=new Map<string,DailyVolume>();
+  for(let offset=29;offset>=7;offset--){
+   const value=new Date(today+'T12:00:00');
+   value.setDate(value.getDate()-offset);
+   const day=localDay(value), bucket={day,sent:0,received:0};
+   buckets.set(day,bucket);
+   older.push(bucket);
+  }
+  for(const transfer of transfers){
+   const day=buckets.get(localDay(new Date(transfer.created_at)));
+   if(!day)continue;
+   if(transfer.direction!=='received')day.sent+=Number(transfer.amount_cents);
+   if(transfer.direction!=='sent')day.received+=Number(transfer.amount_cents);
+  }
+ }
+ const days=[...older,...weekly];
+ const oldest=transfers.at(-1);
+ const limited=range===30&&transfers.length===200&&oldest&&older.length>0&&localDay(new Date(oldest.created_at))>=older[0].day;
+ const covered=limited?days.filter(d=>d.day>=weekly[0].day||d.day>localDay(new Date(oldest.created_at))):days;
+ const active=covered.filter(d=>Number(d.sent)||Number(d.received));
+ const max=Math.max(1,...covered.flatMap(d=>[Number(d.sent),Number(d.received)]));
+ const showChart=active.length>1&&!limited;
+ return <section className="insights-grid">
+  <div className="panel chart-panel">
+   <div className="section-heading"><h2>Daily transfer volume</h2><div className="chart-range" role="group" aria-label="Transfer range">
+    {([7,30] as const).map(value=><button key={value} aria-pressed={range===value} onClick={()=>setRange(value)}>{value} days</button>)}
+   </div></div>
+   {insights&&<>
+    {showChart?<><div className="chart-legend"><span><i className="in"/>Received</span><span><i className="out"/>Sent</span></div>
+     <div className="bar-chart" aria-hidden="true">{days.map((d,index)=><div className="chart-day" key={d.day}>
+      <div className="bars">{(['received','sent'] as const).map(direction=><div key={direction} className={`bar ${direction}`} style={{height:`${Number(d[direction])/max*110}px`}} title={`${direction==='received'?'Received':'Sent'} ${money(d[direction])}`}/>)}</div>
+      <span>{range===7?new Date(d.day+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'}):
+       index%7===3?date(d.day+'T12:00:00'):''}</span>
+     </div>)}</div></>:<div className="chart-empty" role="status">
+     <strong>{limited?'Part of this range is unavailable':active.length?'Transfers on one day':'No transfers in this period'}</strong>
+     <p>{limited?'The 30-day view uses your latest 200 transfers. Daily amounts show only complete days.':
+      active.length?`On ${date(active[0].day+'T12:00:00')}: ${money(active[0].received)} received · ${money(active[0].sent)} sent.`:
+      range===7?'Try the 30-day view for older activity.':'Completed transfers will appear here.'}</p>
+    </div>}
+    <p className="chart-note">Transfers between your accounts appear in both daily amounts and do not count toward monthly sent or received totals.</p>
+    <details className="chart-data"><summary>View daily amounts</summary><table><thead><tr><th scope="col">Date</th><th scope="col">Received</th><th scope="col">Sent</th></tr></thead>
+     <tbody>{covered.map(d=><tr key={d.day}><td>{date(d.day+'T12:00:00')}</td><td>{money(d.received)}</td><td>{money(d.sent)}</td></tr>)}</tbody>
+    </table></details>
+   </>}
+  </div>
+  <section className="monthly-flow"><h2>This month</h2><dl><div><dt>Received</dt><dd>{money(Number(insights?.monthly.received_cents||0))}</dd></div><div><dt>Sent</dt><dd>{money(Number(insights?.monthly.sent_cents||0))}</dd></div></dl></section>
+ </section>;
+}
 function Modal({title,eyebrow,onClose,children,className=''}:{title:string;eyebrow?:string;onClose:()=>void;children:React.ReactNode;className?:string}){
  const ref=useRef<HTMLDivElement>(null);
  useEffect(()=>{const before=document.activeElement as HTMLElement;ref.current?.focus();const prev=document.body.style.overflow;document.body.style.overflow='hidden';return()=>{document.body.style.overflow=prev;before?.focus();}},[]);
@@ -65,7 +125,7 @@ export default function Home(){
  <span className="account-balance"><strong>{hidden?'••••••':money(a.balance_cents)}</strong></span>
  </button>)}{accounts.length===0&&<div className="empty accounts-empty"><Landmark size={28}/><h3>No accounts yet</h3><p>Create an account with $200 in simulated funds.</p><button className="button primary" onClick={()=>setLink(true)}><Plus size={16}/> Link an account</button></div>}</div></section>}
  {(tab==='Overview'||tab==='Activity')&&<section className="activity-panel"><div className="section-heading">{tab==='Overview'&&<h2>Recent activity</h2>}{tab==='Overview'?<button className="text-button" onClick={()=>nav('Activity')}>View all activity</button>:<a href="/api/activity.csv" className="button secondary small"><Download size={16}/>Export CSV</a>}</div><div className="activity-tools"><div className="filters">{['All activity','Sent','Received','Between accounts'].map(f=><button key={f} className={filter===f?'selected':''} aria-pressed={filter===f} onClick={()=>setFilter(f)}>{f}</button>)}</div><div className="search-box"><Search size={16}/><input aria-label="Search activity" placeholder="Search activity" value={search} onChange={e=>setSearch(e.target.value)}/></div></div><div className="table-scroll"><table><thead><tr><th>Transaction</th><th>Date</th><th>Status</th><th className="amount-th">Amount</th></tr></thead><tbody>{visible.slice(0,tab==='Overview'?5:200).map(t=><tr key={t.id} onClick={()=>setDetail(t)}><td><button className="transaction-name" onClick={e=>{e.stopPropagation();setDetail(t);}}><span className={'transaction-avatar '+t.direction}>{t.direction==='internal'?<ArrowLeftRight size={18}/>:initials(t.counterparty)}</span><span><strong>{t.direction==='internal'?'Between your accounts':t.counterparty}</strong><small>{t.memo||`${t.direction==='sent'?'Sent from':'Received to'} ${t.direction==='sent'?t.source_label:t.destination_label}`}</small></span></button></td><td className="date-cell">{date(t.created_at)}<small>{new Date(t.created_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</small></td><td><span className="completed"><span/>Completed</span></td><td className={'amount '+t.direction}>{t.direction==='received'?'+':t.direction==='sent'?'−':''}{money(t.amount_cents)}</td></tr>)}</tbody></table></div>{visible.length===0&&<div className="empty"><ArrowLeftRight size={25}/><h3>{search||filter!=='All activity'?'No matching activity.':'No transfers yet.'}</h3><p>{search?'Try a different name or note.':'Send to someone or move money between your accounts.'}</p></div>}<div className="table-footer"><span>{visible.length===0?'0':`1–${Math.min(visible.length,tab==='Overview'?5:200)}`} of {visible.length}{transfers.length===200?' (latest 200)':''}</span></div></section>}
- {tab==='Insights'&&<section className="insights-grid"><div className="panel chart-panel"><div className="section-heading"><div><h2>Daily transfer volume</h2></div><span className="period-label">Last 7 days</span></div><div className="chart-legend"><span><i className="in"/>Received</span><span><i className="out"/>Sent</span></div><div className="bar-chart" aria-hidden="true">{insights?.weekly.every(d=>!Number(d.sent)&&!Number(d.received))&&<span className="chart-empty">No transfers in this period</span>}{insights?.weekly.map(d=>{const max=Math.max(...insights.weekly.flatMap(w=>[Number(w.sent),Number(w.received)]),1);return <div className="chart-day" key={d.day}><div className="bars"><div className="bar received" style={{height:`${Number(d.received)/max*110}px`}} title={`Received ${money(d.received)}`}/><div className="bar sent" style={{height:`${Number(d.sent)/max*110}px`}} title={`Sent ${money(d.sent)}`}/></div><span>{new Date(d.day+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'})}</span></div>;})}</div><p className="chart-note">Transfers between your accounts appear on both sides of the chart and do not count toward monthly sent or received totals.</p><details className="chart-data"><summary>View daily amounts</summary><table><thead><tr><th scope="col">Date</th><th scope="col">Received</th><th scope="col">Sent</th></tr></thead><tbody>{insights?.weekly.map(d=><tr key={d.day}><td>{date(d.day+'T12:00:00')}</td><td>{money(d.received)}</td><td>{money(d.sent)}</td></tr>)}</tbody></table></details></div><section className="monthly-flow"><h2>This month</h2><dl><div><dt>Received</dt><dd>{money(Number(insights?.monthly.received_cents||0))}</dd></div><div><dt>Sent</dt><dd>{money(Number(insights?.monthly.sent_cents||0))}</dd></div></dl></section></section>}
+ {tab==='Insights'&&<InsightChart insights={insights} transfers={transfers}/>}
  </>}</main></div>{transferMode&&<TransferModal mode={transferMode} accounts={accounts} onClose={()=>setTransferMode(null)} onDone={done}/ >}{share&&<ShareModal accounts={accounts} onClose={()=>setShare(false)} onDone={()=>{setShare(false);refresh();setToast('Joint ownership updated.');}}/>}{link&&<LinkModal onClose={()=>setLink(false)} onDone={done}/ >}{detail&&<Modal title="Transfer details" onClose={()=>setDetail(null)}><div className={'receipt-icon '+detail.direction}>{detail.direction==='received'?<ArrowDownLeft/>:<ArrowUpRight/>}</div><div className="receipt-amount">{money(detail.amount_cents)}</div><div className="receipt-status"><span className="completed"><span/>Completed</span></div><dl className="receipt-list"><div><dt>From</dt><dd>{detail.source_label}</dd></div><div><dt>To</dt><dd>{detail.direction==='internal'?detail.destination_label:detail.counterparty}</dd></div><div><dt>Date</dt><dd>{new Date(detail.created_at).toLocaleString()}</dd></div><div><dt>Note</dt><dd>{detail.memo||'No note added'}</dd></div><div><dt>Transfer ID</dt><dd className="mono">{detail.id}</dd></div></dl><button className="button secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(detail.id);setToast('Transfer ID copied.');}catch{setToast('Select the transfer ID to copy it.');}}}><Copy size={16}/>Copy transfer ID</button></Modal>}<PayBot open={bot} onClose={()=>setBot(false)}/>{toast&&<div className="toast" role="status"><Check size={17}/>{toast}<button aria-label="Dismiss notification" onClick={()=>setToast('')}><X size={15}/></button></div>}</div>
 }
 function TransferModal({mode,accounts,onClose,onDone}:{mode:'send'|'internal';accounts:Account[];onClose:()=>void;onDone:()=>void}){
