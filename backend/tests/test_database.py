@@ -1,5 +1,6 @@
 """Integration checks on real PostgreSQL, isolated by unique fixture identities."""
 from concurrent.futures import ThreadPoolExecutor
+import ast
 import importlib.util
 from uuid import uuid4
 from pathlib import Path
@@ -8,6 +9,90 @@ import psycopg
 from psycopg import errors
 from dotenv import dotenv_values
 C=dotenv_values(Path(__file__).resolve().parents[2]/'.env')
+
+OLD_HISTORY_SQL = '''WITH mine AS (SELECT account_id FROM paylink.account_holders WHERE user_id=%s)
+ SELECT t.id,t.amount_cents,t.memo,t.created_at,t.source_account_id,t.destination_account_id,
+ CASE WHEN t.source_account_id IN(SELECT account_id FROM mine) AND t.destination_account_id IN(SELECT account_id FROM mine)
+ THEN 'internal' WHEN t.source_account_id IN(SELECT account_id FROM mine) THEN 'sent' ELSE 'received' END AS direction,
+ s.label AS source_label,d.label AS destination_label,
+ COALESCE((SELECT u.full_name FROM paylink.account_holders h JOIN paylink.users u ON u.id=h.user_id
+ WHERE h.account_id=CASE WHEN t.source_account_id IN(SELECT account_id FROM mine)
+ THEN t.destination_account_id ELSE t.source_account_id END ORDER BY h.joined_at,u.id LIMIT 1),'Account') AS counterparty
+ FROM paylink.transfers t JOIN paylink.bank_accounts s ON s.id=t.source_account_id
+ JOIN paylink.bank_accounts d ON d.id=t.destination_account_id
+ WHERE t.source_account_id IN(SELECT account_id FROM mine) OR t.destination_account_id IN(SELECT account_id FROM mine)
+ ORDER BY t.created_at DESC,t.id DESC LIMIT 200'''
+
+OLD_WEEKLY_SQL = '''WITH days AS(SELECT generate_series(current_date-6,current_date,'1 day')::date AS day),
+          mine AS(SELECT account_id FROM paylink.account_holders WHERE user_id=%s)
+          SELECT days.day,coalesce(sum(t.amount_cents) FILTER(WHERE t.source_account_id IN(SELECT account_id FROM mine)),0)::bigint AS sent,
+          coalesce(sum(t.amount_cents) FILTER(WHERE t.destination_account_id IN(SELECT account_id FROM mine)),0)::bigint AS received
+          FROM days LEFT JOIN paylink.transfers t ON t.created_at>=days.day AND t.created_at<days.day+interval '1 day'
+          AND (t.source_account_id IN(SELECT account_id FROM mine) OR t.destination_account_id IN(SELECT account_id FROM mine))
+          GROUP BY days.day ORDER BY days.day'''
+
+
+def rewritten_queries():
+    tree = ast.parse((Path(__file__).resolve().parents[1]/'app/main.py').read_text())
+    history = next(node.value.value for node in tree.body if isinstance(node, ast.Assign)
+                   and any(isinstance(t, ast.Name) and t.id == 'HISTORY_SQL' for t in node.targets))
+    weekly = next(node.value for node in ast.walk(tree) if isinstance(node, ast.Constant)
+                  and isinstance(node.value, str) and node.value.startswith('WITH days AS'))
+    return history, weekly
+
+
+@pytest.mark.parametrize('zone', ['America/Chicago', 'UTC', 'Australia/Lord_Howe'])
+def test_indexed_query_rewrites_match_reference(zone):
+    ids = [uuid4() for _ in range(12)]
+    u,v,joint,empty,no_accounts,bank,a,b,savings,d,e,f = ids
+    suffix = uuid4().hex[:12]
+    with psycopg.connect(C['ADMIN_DATABASE_URL']) as c:
+        c.execute("SELECT set_config('TimeZone',%s,true)", (zone,))
+        for i, uid in enumerate((u,v,joint,empty,no_accounts)):
+            name = 'rewrite_'+suffix+'_'+str(i)
+            c.execute('INSERT INTO paylink.users(id,username,email,full_name,password_hash) VALUES(%s,%s,%s,%s,%s)',
+                      (uid,name,name+'@test.dev','Rewrite '+str(i),'unused'))
+        c.execute('INSERT INTO paylink.banks(id,name,routing_number) VALUES(%s,%s,%s)',
+                  (bank,'Rewrite bank',str(int(suffix,16)%1000000000).zfill(9)))
+        for i, account in enumerate((a,b,savings,d,e,f)):
+            c.execute('''INSERT INTO paylink.bank_accounts(id,bank_id,account_number,account_type,label,
+              balance_cents,opening_balance_cents) VALUES(%s,%s,%s,'checking',%s,10000000,10000000)''',
+                      (account,bank,str(900000000000+i),'Rewrite '+str(i)))
+        for owner, account in ((u,a),(u,b),(u,savings),(v,d),(joint,b),(joint,e),(empty,f)):
+            c.execute('INSERT INTO paylink.account_holders(user_id,account_id,joined_at) VALUES(%s,%s,current_date-10)', (owner,account))
+        times = [r[0] for r in c.execute('''SELECT unnest(ARRAY[
+          (current_date-6)::timestamptz-interval '1 microsecond',
+          (current_date-6)::timestamptz,
+          current_date::timestamptz-interval '1 microsecond',
+          current_date::timestamptz,
+          (current_date+1)::timestamptz-interval '1 microsecond',
+          (current_date+1)::timestamptz,
+          (current_date-2)::timestamptz+interval '12 hours'])''')]
+        pairs = [(u,a,d),(v,d,a),(u,a,b),(joint,b,savings),(v,d,e),(joint,b,d)]
+        with c.cursor().copy('''COPY paylink.transfers(id,initiated_by,source_account_id,
+          destination_account_id,amount_cents,memo,idempotency_key,created_at) FROM STDIN''') as cp:
+            for i in range(720):
+                actor,source,destination = pairs[i%len(pairs)]
+                # More than 200 relevant rows tie on timestamp at the cutoff.
+                cp.write_row((uuid4(),actor,source,destination,100+i,'=rewrite,'+str(i),uuid4(),times[6] if i<360 else times[i%7]))
+        for uid in (u,v,joint,empty,no_accounts,uuid4()):
+            for old, new in zip((OLD_HISTORY_SQL,OLD_WEEKLY_SQL), rewritten_queries()):
+                before = c.execute(old,(uid,))
+                columns = [(col.name,col.type_code) for col in before.description]
+                rows = before.fetchall()
+                after = c.execute(new,(uid,))
+                assert [(col.name,col.type_code) for col in after.description] == columns
+                assert after.fetchall() == rows
+        history, weekly = rewritten_queries()
+        rows = c.execute(history,(u,)).fetchall()
+        assert len(rows) == 200
+        assert len({r[0] for r in rows}) == 200
+        assert [(r[3],r[0]) for r in rows] == sorted(((r[3],r[0]) for r in rows),reverse=True)
+        assert {'sent','received','internal'} <= {r[6] for r in rows}
+        assert c.execute(history,(empty,)).fetchall() == []
+        assert len(c.execute(weekly,(empty,)).fetchall()) == 7
+        assert all(row[1:] == (0,0) for row in c.execute(weekly,(no_accounts,)))
+        c.rollback()
 
 
 def test_synthetic_generator_isolated_and_deterministic():

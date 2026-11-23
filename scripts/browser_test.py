@@ -2,6 +2,7 @@
 import re
 import json
 import platform
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from browser_support import launch_chromium
@@ -10,6 +11,8 @@ from dotenv import dotenv_values
 import psycopg
 from playwright.sync_api import sync_playwright, expect
 ROOT=Path(__file__).resolve().parents[1]
+ARTIFACTS=Path(os.environ.get('BROWSER_ARTIFACT_DIR',str(ROOT/'artifacts')))
+ARTIFACTS.mkdir(parents=True,exist_ok=True)
 C=dotenv_values(ROOT/'.env')
 from urllib.parse import urlparse
 if any(urlparse(C[k]).hostname not in ('localhost','127.0.0.1') for k in ('DATABASE_URL','ADMIN_DATABASE_URL')):
@@ -45,14 +48,14 @@ try:
     dialog.get_by_placeholder('A little note goes a long way').fill('Browser validation — lunch split')
     dialog.get_by_role('button',name='Review transfer').click()
     expect(dialog.get_by_role('heading',name='Review your transfer')).to_be_visible()
-    page.screenshot(path=str(ROOT/'artifacts/04-transfer-review.png'),full_page=False)
+    page.screenshot(path=str(ARTIFACTS/'04-transfer-review.png'),full_page=False)
     dialog.get_by_role('button',name='Confirm & send').click()
     expect(dialog.get_by_role('heading',name='Transfer completed')).to_be_visible()
     row=db("SELECT id,amount_cents FROM paylink.transfers WHERE memo='Browser validation — lunch split' ORDER BY created_at DESC LIMIT 1")[0]
     transfer_ids.append(row[0]);assert row[1]==1234
     assert db('SELECT balance_cents FROM paylink.bank_accounts WHERE id=%s',(source[0],))[0][0]==source[1]-1234
     assert db('SELECT balance_cents FROM paylink.bank_accounts WHERE id=%s',(recipient[0],))[0][0]==recipient[1]+1234
-    page.screenshot(path=str(ROOT/'artifacts/05-transfer-success.png'),full_page=False)
+    page.screenshot(path=str(ARTIFACTS/'05-transfer-success.png'),full_page=False)
     record('UI transfer committed: source −1234 cents, recipient +1234 cents, one history row')
     dialog.get_by_role('button',name='Back to overview').click()
     page.reload();expect(page.get_by_role('heading',name='Hello, Sai.')).to_be_visible()
@@ -61,11 +64,20 @@ try:
     expect(page.get_by_role('button',name='Siddhardth Browser validation')).to_be_visible()
     page.get_by_role('button',name='Siddhardth Browser validation').click()
     expect(page.get_by_role('dialog')).to_contain_text(str(row[0]))
-    page.screenshot(path=str(ROOT/'artifacts/06-transfer-details.png'),full_page=False)
+    page.screenshot(path=str(ARTIFACTS/'06-transfer-details.png'),full_page=False)
     page.get_by_role('button',name='Close dialog').click()
     with page.expect_download() as download:page.get_by_role('link',name='Export CSV').click()
     text=Path(download.value.path()).read_text();assert 'Browser validation' in text
     record('Reload persistence, activity search, details, and real CSV download')
+    page.get_by_role('textbox',name='Search activity').fill('')
+    expect(page.locator('tbody tr')).not_to_have_count(0)
+    page.screenshot(path=str(ARTIFACTS/'sai-history.png'),full_page=True)
+    page.get_by_role('button',name='Insights',exact=True).click()
+    expect(page.get_by_role('heading',name='A week in motion')).to_be_visible()
+    expect(page.locator('.chart-day')).to_have_count(7)
+    assert any(float(bar.evaluate('el=>el.style.height.replace("px","")'))>2 for bar in page.locator('.bar').all())
+    page.screenshot(path=str(ARTIFACTS/'sai-insights.png'),full_page=True)
+    record('Sai history, CSV export, and seven-day insights render with data')
     page.get_by_role('button',name='Overview',exact=True).click()
     page.get_by_role('button',name='Move between accounts').click()
     dialog=page.get_by_role('dialog');dialog.get_by_label('From account').select_option(str(source[0]))
@@ -102,7 +114,7 @@ try:
     page.get_by_role('button',name='Activity',exact=True).click()
     page.get_by_role('textbox',name='Search activity').fill('Browser validation')
     expect(page.get_by_role('button',name='Sai Kadamati Browser validation')).to_be_visible()
-    page.screenshot(path=str(ROOT/'artifacts/07-recipient-receipt.png'),full_page=True)
+    page.screenshot(path=str(ARTIFACTS/'07-recipient-receipt.png'),full_page=True)
     record('Second signed-in user sees received transfer and shared account')
     page.get_by_role('button',name='Overview',exact=True).click()
     expect(page.get_by_role('button').filter(has_text='Browser validation account')).to_be_visible()
@@ -132,7 +144,7 @@ try:
     page.get_by_role('button',name='Overview',exact=True).click()
     expect(page.get_by_role('heading',name='Hello, Siddhardth.')).to_be_visible()
     if page.get_by_role('button',name='Dismiss notification').is_visible():page.get_by_role('button',name='Dismiss notification').click()
-    page.screenshot(path=str(ROOT/'artifacts/08-mobile.png'),full_page=True)
+    page.screenshot(path=str(ARTIFACTS/'08-mobile.png'),full_page=True)
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     record('390px mobile layout, navigation, and no page overflow')
     page.get_by_role('button',name='Toggle navigation').click();page.get_by_role('button',name='Sign out').click()
@@ -149,22 +161,22 @@ try:
     starter=db('''SELECT a.id,a.balance_cents,a.opening_balance_cents FROM paylink.bank_accounts a
         JOIN paylink.account_holders h ON h.account_id=a.id JOIN paylink.users u ON u.id=h.user_id WHERE u.username=%s''',(username,))
     assert len(starter)==1 and starter[0][1:]==(20000,20000)
-    page.screenshot(path=str(ROOT/'artifacts/09-new-account.png'),full_page=True)
+    page.screenshot(path=str(ARTIFACTS/'09-new-account.png'),full_page=True)
     record('Registration automatically creates exactly one $200 checking account')
     assert not errors,errors
     page.set_viewport_size({'width':1440,'height':1100})
     page.get_by_role('button',name='How to test',exact=True).first.hover()
     expect(page.get_by_role('tooltip')).to_contain_text('$200')
-    page.screenshot(path=str(ROOT/'artifacts/10-guide-preview.png'),full_page=True)
+    page.screenshot(path=str(ARTIFACTS/'10-guide-preview.png'),full_page=True)
     page.get_by_role('button',name='How to test',exact=True).first.click()
     expect(page.get_by_role('dialog',name='How to test PayLink')).to_contain_text('Review and send $12.34')
-    page.screenshot(path=str(ROOT/'artifacts/11-test-guide.png'),full_page=True)
+    page.screenshot(path=str(ARTIFACTS/'11-test-guide.png'),full_page=True)
     page.get_by_role('button',name='Got it, let’s try it').click()
     page.set_viewport_size({'width':390,'height':844})
     page.get_by_role('button',name='How to test',exact=True).click()
     expect(page.get_by_role('dialog',name='How to test PayLink')).to_be_visible()
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-    page.screenshot(path=str(ROOT/'artifacts/12-test-guide-mobile.png'),full_page=True)
+    page.screenshot(path=str(ARTIFACTS/'12-test-guide-mobile.png'),full_page=True)
     page.get_by_role('button',name='Close dialog').click()
     record('How to test button provides hover tips and a complete click-through guide')
     assert not errors,errors
@@ -187,4 +199,4 @@ finally:
             c.execute('UPDATE paylink.bank_accounts SET balance_cents=balance_cents-%s WHERE id=%s',(r[2],r[1]))
     for id in created:
         c.execute('DELETE FROM paylink.account_holders WHERE account_id=%s',(id,));c.execute('DELETE FROM paylink.bank_accounts WHERE id=%s',(id,))
- (ROOT/'artifacts/browser-results.json').write_text(json.dumps({'completed':completed,'passed':steps,'javascript_errors':errors,'database':'local PostgreSQL 16, not hosted Supabase','platform':platform.platform(),'timestamp_utc':datetime.now(timezone.utc).isoformat(),'test_data_cleaned':True},indent=2))
+ (ARTIFACTS/'browser-results.json').write_text(json.dumps({'completed':completed,'passed':steps,'javascript_errors':errors,'database':'local PostgreSQL 16, not hosted Supabase','platform':platform.platform(),'timestamp_utc':datetime.now(timezone.utc).isoformat(),'test_data_cleaned':True},indent=2))
