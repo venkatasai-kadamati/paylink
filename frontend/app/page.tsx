@@ -444,6 +444,9 @@ export default function Home() {
       ?.querySelector<HTMLButtonElement>('button[aria-current="page"]')
       ?.focus();
     const handleKey = (event: KeyboardEvent) => {
+      // A native PayBot dialog can sit above the navigation sheet.
+      // Let that top-most dialog own its keyboard events.
+      if (!sidebar.current?.contains(document.activeElement)) return;
       if (event.key === "Escape") {
         event.preventDefault();
         setMobile(false);
@@ -650,6 +653,7 @@ export default function Home() {
               aria-label="Sign out"
               onClick={async () => {
                 await api("/auth/logout", post({}));
+                setMobile(false);
                 setUser(null);
                 setBot(false);
                 setAccounts([]);
