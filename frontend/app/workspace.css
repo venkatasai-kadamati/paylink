@@ -584,6 +584,17 @@
 .input-search {
   position: relative;
 }
+.input-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.input-search > input {
+  flex: 1;
+}
+.input-search > .button {
+  flex-shrink: 0;
+}
 .search-box {
   flex: 1 1 225px;
   max-width: 330px;
