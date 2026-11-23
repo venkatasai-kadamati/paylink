@@ -420,6 +420,54 @@ export default function Home() {
     [accountFilter, setAccountFilter] = useState(""),
     [startDate, setStartDate] = useState(""),
     [endDate, setEndDate] = useState("");
+  const sidebar = useRef<HTMLElement>(null);
+  const mobileToggle = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1021px)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) setMobile(false);
+    };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, []);
+  useEffect(() => {
+    if (!mobile) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const controls = () =>
+      Array.from(
+        sidebar.current?.querySelectorAll<HTMLButtonElement>(
+          "button:not(:disabled)",
+        ) ?? [],
+      );
+    sidebar.current
+      ?.querySelector<HTMLButtonElement>('button[aria-current="page"]')
+      ?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobile(false);
+      }
+      if (event.key !== "Tab") return;
+      const items = controls(),
+        first = items[0],
+        last = items.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      document.body.style.overflow = previousOverflow;
+      if (mobileToggle.current?.getClientRects().length)
+        mobileToggle.current.focus();
+    };
+  }, [mobile]);
   const refresh = useCallback(async () => {
     setError("");
     setLoading(true);
@@ -517,11 +565,32 @@ export default function Home() {
   }
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
+      {mobile && (
+        <div
+          className="nav-scrim"
+          aria-hidden="true"
+          onClick={() => setMobile(false)}
+        />
+      )}
       <aside
         id="paylink-sidebar"
+        ref={sidebar}
+        role={mobile ? "dialog" : undefined}
+        aria-modal={mobile ? true : undefined}
+        aria-label="Workspace navigation"
         className={"sidebar " + (mobile ? "mobile-open" : "")}
       >
         <Logo />
+        <button
+          className="icon-button mobile-close"
+          aria-label="Close navigation"
+          onClick={() => setMobile(false)}
+        >
+          <X size={21} />
+        </button>
         <div className="nav-label">WORKSPACE</div>
         <nav aria-label="Main navigation">
           {[
@@ -600,10 +669,11 @@ export default function Home() {
           </div>
         </div>
       </aside>
-      <div className="main-wrap">
+      <div className="main-wrap" inert={mobile}>
         <header className="topbar">
           <button
             className="icon-button mobile-menu"
+            ref={mobileToggle}
             aria-label="Toggle navigation"
             aria-expanded={mobile}
             aria-controls="paylink-sidebar"
@@ -634,7 +704,12 @@ export default function Home() {
             <span className="avatar">{initials(user.full_name)}</span>
           </div>
         </header>
-        <main className="dashboard" data-page={tab}>
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="dashboard"
+          data-page={tab}
+        >
           <div className="page-heading">
             <div>
               <h1>
@@ -653,12 +728,14 @@ export default function Home() {
               <p className="page-subtitle">
                 {
                   {
-                    Overview: "Here’s where things stand with your money.",
-                    Activity: "Every move, all in one place.",
-                    Accounts: "A home for your everyday and shared money.",
-                    Balance: "Your complete picture, down to the cent.",
-                    Insights: "A closer look at how your money moves.",
-                    Invitations: "Bring your people into the picture.",
+                    Overview: "Your accounts and recent activity, at a glance.",
+                    Activity: "Find, filter, and export your transfers.",
+                    Accounts: "Manage personal accounts and shared ownership.",
+                    Balance: "A breakdown of your available simulated funds.",
+                    Insights:
+                      "Understand your incoming and outgoing transfers.",
+                    Invitations:
+                      "Review and manage shared account invitations.",
                   }[tab]
                 }
               </p>
@@ -693,6 +770,7 @@ export default function Home() {
                       <button
                         className="icon-button"
                         aria-label={hidden ? "Show balance" : "Hide balance"}
+                        aria-pressed={hidden}
                         onClick={() => setHidden(!hidden)}
                       >
                         {hidden ? <EyeOff size={17} /> : <Eye size={17} />}
@@ -792,6 +870,7 @@ export default function Home() {
                       <button
                         className="icon-button"
                         aria-label={hidden ? "Show balance" : "Hide balance"}
+                        aria-pressed={hidden}
                         onClick={() => setHidden(!hidden)}
                       >
                         {hidden ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -1117,6 +1196,9 @@ export default function Home() {
                                       {t.memo ||
                                         `${t.direction === "sent" ? "Sent from" : "Received to"} ${t.direction === "sent" ? t.source_label : t.destination_label}`}
                                     </small>
+                                    <small className="mobile-transaction-date">
+                                      {date(t.created_at)}
+                                    </small>
                                   </span>
                                 </button>
                               </td>
@@ -1164,6 +1246,11 @@ export default function Home() {
                     </div>
                   )}
                   <div className="table-footer">
+                    <span className="table-note">
+                      {tab === "Overview"
+                        ? "Your latest transfers"
+                        : "Select a transfer to view its receipt"}
+                    </span>
                     <span>
                       {visible.length === 0
                         ? "0"

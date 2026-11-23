@@ -121,6 +121,7 @@ export function InvitationCenter({
         <div className="filters">
           <button
             className={!history ? "selected" : ""}
+            aria-pressed={!history}
             onClick={() => setHistory(false)}
           >
             Pending{" "}
@@ -128,6 +129,7 @@ export function InvitationCenter({
           </button>
           <button
             className={history ? "selected" : ""}
+            aria-pressed={history}
             onClick={() => setHistory(true)}
           >
             History

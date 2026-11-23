@@ -8,7 +8,9 @@ import {
   EyeOff,
   LoaderCircle,
   LockKeyhole,
-  MoveUpRight,
+  Landmark,
+  MessageSquare,
+  Users,
 } from "lucide-react";
 
 export function Auth({ onLogin }: { onLogin: () => void }) {
@@ -54,60 +56,65 @@ export function Auth({ onLogin }: { onLogin: () => void }) {
           <span className="logo-mark">
             <ArrowLeftRight size={22} />
           </span>
-          paylink<span className="brand-period">.</span>
+          PayLink
         </a>
         <div className="story-copy">
           <span className="story-kicker">
-            <span /> A little more connected
+            <span /> Your everyday banking workspace
           </span>
-          <h1>
-            Your money.
+          <h2>
+            Every account.
             <br />
-            Your people.
+            Every transfer.
             <br />
-            <em>One place.</em>
-          </h1>
+            <em>A clearer view.</em>
+          </h2>
           <p>
-            Move money, share an account, and keep the whole picture in view.
+            A considered space to manage your money, move it with confidence,
+            and share an account on your terms.
           </p>
         </div>
-        <div className="auth-art" aria-hidden="true">
-          <div className="art-orbit" />
-          <div className="art-orbit second" />
-          <div className="art-account">
-            <span className="art-symbol">
-              <ArrowLeftRight size={32} />
+        <div className="auth-illustration">
+          <div>
+            <span className="auth-feature-icon">
+              <Landmark size={21} aria-hidden="true" />
             </span>
-            <span>Everyday, together.</span>
-            <strong>
-              Make room for
-              <br />
-              what matters.
-            </strong>
-            <div className="art-account-foot">
-              <span>Personal + joint accounts</span>
-              <MoveUpRight size={23} />
-            </div>
-          </div>
-          <div className="art-confirm">
             <span>
-              <Check size={18} />
+              <strong>One view of your accounts</strong>
+              <small>Personal balances. Shared possibilities.</small>
             </span>
-            <div>
-              Right where it belongs.<small>Instant simulated transfers</small>
-            </div>
+          </div>
+          <div>
+            <span className="auth-feature-icon">
+              <Users size={21} aria-hidden="true" />
+            </span>
+            <span>
+              <strong>Better, together</strong>
+              <small>Joint accounts, by invitation.</small>
+            </span>
+          </div>
+          <div>
+            <span className="auth-feature-icon">
+              <MessageSquare size={21} aria-hidden="true" />
+            </span>
+            <span>
+              <strong>A little help from PayBot</strong>
+              <small>Answers from your own account activity.</small>
+            </span>
           </div>
         </div>
         <footer>
-          <span>Built for everyday connections.</span>
-          <span>01 — PayLink</span>
+          <LockKeyhole size={15} aria-hidden="true" />
+          <span>A banking simulation. No real money moves.</span>
         </footer>
       </section>
       <section className="auth-entry">
         <div className="auth-top">
-          <span className="auth-mobile-brand">paylink.</span>
+          <span className="auth-mobile-brand">PayLink</span>
           <span>
-            {register ? "Already a member?" : "New around here?"}{" "}
+            <span className="auth-toggle-copy">
+              {register ? "Already have an account?" : "New to PayLink?"}
+            </span>{" "}
             <button
               type="button"
               disabled={busy}
@@ -117,8 +124,7 @@ export function Auth({ onLogin }: { onLogin: () => void }) {
                 setShow(false);
               }}
             >
-              {register ? "Sign in" : "Create an account"}{" "}
-              <ArrowRight size={14} />
+              {register ? "Sign in" : "Create account"} <ArrowRight size={14} />
             </button>
           </span>
         </div>
@@ -127,14 +133,18 @@ export function Auth({ onLogin }: { onLogin: () => void }) {
             <span className="eyebrow">
               {register ? "LET’S GET YOU SET UP" : "YOUR EVERYDAY MONEY SPACE"}
             </span>
-            <h2>{register ? "A fresh start." : "Good to see you."}</h2>
+            <h1>{register ? "Create your account" : "Welcome back"}</h1>
             <p>
               {register
-                ? "Create your PayLink profile. Your first simulated account is on us."
-                : "Sign in to pick up where you left off."}
+                ? "Start with a profile and $200 in simulated funds. No real bank details needed."
+                : "Sign in to your PayLink workspace."}
             </p>
           </div>
-          <form onSubmit={submit} key={register ? "register" : "login"}>
+          <form
+            onSubmit={submit}
+            key={register ? "register" : "login"}
+            aria-busy={busy}
+          >
             {register && (
               <label>
                 Full name
@@ -226,7 +236,10 @@ export function Auth({ onLogin }: { onLogin: () => void }) {
             )}
             <button className="button primary full auth-submit" disabled={busy}>
               {busy ? (
-                <LoaderCircle className="spin" size={18} />
+                <>
+                  <LoaderCircle className="spin" size={18} aria-hidden="true" />
+                  <span>{register ? "Creating account…" : "Signing in…"}</span>
+                </>
               ) : (
                 <>
                   {register ? "Create account" : "Sign in"}
@@ -238,7 +251,7 @@ export function Auth({ onLogin }: { onLogin: () => void }) {
           {process.env.NEXT_PUBLIC_DEMO_ENABLED === "true" && !register && (
             <section className="auth-demos" aria-labelledby="demo-profiles">
               <div className="demo-divider">
-                <span>Or take a look around</span>
+                <span>Explore with a demo</span>
               </div>
               <div className="section-heading">
                 <h3 id="demo-profiles">Demo profiles</h3>
@@ -271,7 +284,8 @@ export function Auth({ onLogin }: { onLogin: () => void }) {
             </section>
           )}
           <p className="auth-safety">
-            <LockKeyhole size={13} /> Simulated funds. Real peace of mind.
+            <LockKeyhole size={15} aria-hidden="true" /> Banking simulation · No
+            real money moves
           </p>
         </div>
         <footer className="auth-footer">
