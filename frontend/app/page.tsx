@@ -664,6 +664,7 @@ export default function Home() {
                 onClick={() => setTransferMode("send")}
               >
                 Send money
+                <ArrowUpRight size={17} aria-hidden="true" />
               </button>
             )}
           </div>

@@ -163,14 +163,20 @@ try:
     dialog=page.get_by_role('dialog')
     dialog.get_by_label('Account to share').select_option(str(account[0]))
     dialog.get_by_label("New owner's username").fill('siddhardth')
-    dialog.get_by_role('button',name='Confirm joint owner').click()
+    dialog.get_by_role('button',name='Send invitation').click()
     expect(page.get_by_role('dialog')).not_to_be_visible()
-    assert db('SELECT count(*) FROM paylink.account_holders WHERE account_id=%s',(account[0],))[0][0]==2
-    record('Joint owner added through UI; one account and two ownership rows')
+    assert db('SELECT count(*) FROM paylink.account_holders WHERE account_id=%s',(account[0],))[0][0]==1
+    record('Joint invitation sent; no ownership granted before acceptance')
     page.get_by_role('button',name='Sign out').click()
-    expect(page.get_by_role('heading',name='Sign in to PayLink')).to_be_visible()
-    page.locator('.demo-buttons button').filter(has_text='Siddhardth').click()
+    expect(page.get_by_role('heading',name='Good to see you.')).to_be_visible()
+    page.get_by_role('button',name='Sign in as Siddhardth').click()
     expect(page.get_by_role('heading',name='Hello, Siddhardth.')).to_be_visible()
+    page.get_by_role('button',name=re.compile(r'^Invitations')).click()
+    invitation=page.locator('.invitation-card').filter(has_text='Browser validation account')
+    invitation.get_by_role('button',name='Accept invitation').click()
+    expect(invitation).not_to_be_visible()
+    assert db('SELECT count(*) FROM paylink.account_holders WHERE account_id=%s',(account[0],))[0][0]==2
+    record('Invited user accepts through UI; one account and two ownership rows')
     page.get_by_role('button',name='Activity',exact=True).click()
     page.get_by_role('textbox',name='Search activity').fill('Browser validation')
     expect(page.get_by_role('button',name='Sai Kadamati Browser validation')).to_be_visible()
@@ -208,7 +214,7 @@ try:
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     record('390px mobile layout, navigation, and no page overflow')
     page.get_by_role('button',name='Toggle navigation').click();page.get_by_role('button',name='Sign out').click()
-    expect(page.get_by_role('heading',name='Sign in to PayLink')).to_be_visible()
+    expect(page.get_by_role('heading',name='Good to see you.')).to_be_visible()
     page.get_by_role('button',name='Create an account',exact=True).click()
     suffix=uuid4().hex[:8];username='browser_'+suffix;registered.append(username)
     page.get_by_label('Full name',exact=True).fill('Browser Test')
@@ -237,10 +243,12 @@ finally:
             c.execute('DELETE FROM paylink.bank_accounts WHERE id=%s',(starter_id,))
         c.execute('DELETE FROM paylink.users WHERE username=%s',(username,))
     for id in transfer_ids:
+        c.execute('DELETE FROM paylink.transfer_postings WHERE transfer_id=%s',(id,))
         r=c.execute('DELETE FROM paylink.transfers WHERE id=%s RETURNING source_account_id,destination_account_id,amount_cents',(id,)).fetchone()
         if r:
             c.execute('UPDATE paylink.bank_accounts SET balance_cents=balance_cents+%s WHERE id=%s',(r[2],r[0]))
             c.execute('UPDATE paylink.bank_accounts SET balance_cents=balance_cents-%s WHERE id=%s',(r[2],r[1]))
     for id in created:
+        c.execute('DELETE FROM paylink.account_invitations WHERE account_id=%s',(id,))
         c.execute('DELETE FROM paylink.account_holders WHERE account_id=%s',(id,));c.execute('DELETE FROM paylink.bank_accounts WHERE id=%s',(id,))
  (ARTIFACTS/'browser-results.json').write_text(json.dumps({'completed':completed,'passed':steps,'javascript_errors':errors,'database':'local PostgreSQL 16, not hosted Supabase','platform':platform.platform(),'timestamp_utc':datetime.now(timezone.utc).isoformat(),'test_data_cleaned':True},indent=2))

@@ -1,4 +1,5 @@
 import os
+import logging
 import re
 from collections import defaultdict
 from datetime import timedelta
@@ -164,6 +165,7 @@ class BedrockProvider:
         self.used_bedrock = False
 
     def answer(self, question, kind, facts):
+        self.used_bedrock = False
         fallback = LocalProvider().answer(question, kind, facts)
         if kind in GUIDES or kind == 'lookup_help' or not facts:
             return fallback
@@ -197,6 +199,9 @@ class BedrockProvider:
         except Exception as e:
             from botocore.exceptions import BotoCoreError, ClientError
             if isinstance(e, (BotoCoreError, ClientError)):
+                # Operational code only: never log questions, account facts or keys.
+                code = e.response.get('Error', {}).get('Code', type(e).__name__) if isinstance(e, ClientError) else type(e).__name__
+                logging.getLogger(__name__).warning('PayBot Bedrock fallback: %s', code)
                 return fallback
             raise
 
