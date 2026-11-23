@@ -455,6 +455,8 @@ label {
   background: #f3f2ed;
 }
 .bank-monogram {
+  grid-column: 1;
+  grid-row: 1;
   display: grid;
   place-items: center;
   width: 34px;
@@ -464,6 +466,8 @@ label {
   border-radius: 8px;
 }
 .account-info {
+  grid-column: 2;
+  grid-row: 1;
   padding-top: 1px;
   min-width: 0;
 }
@@ -494,6 +498,7 @@ label {
 }
 .account-balance {
   grid-column: 1/3;
+  grid-row: 3;
   display: flex;
   justify-content: space-between;
   align-items: end;
