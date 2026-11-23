@@ -529,6 +529,13 @@ select:focus {
   font-size: 14px;
   color: #31507c;
 }
+.info-note > span {
+  min-width: 0;
+}
+.info-note small {
+  display: block;
+  margin-top: 8px;
+}
 .success-circle,
 .receipt-icon {
   width: 52px;
