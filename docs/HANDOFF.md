@@ -14,4 +14,4 @@ The five domain tables remain users, banks, bank_accounts, account_holders and t
 
 Documents and ER sources are in docs/ with matching PDF/Word/HTML exports. Sai/Siddhardth ownership is a proposed split for review and explanation, not verified historical contribution. Preserve the accurate Codex disclosure. Actual team contribution statements and course AI-policy compliance remain the team's responsibility; do not invent them.
 
-New signup behavior: registration creates a default $200 checking account and ownership atomically. Additional accounts also open with $200. Existing balances/history were preserved. The UI uses larger system fonts, clearer weights and contrast, professional transfer labels, and a How to test button with hover tips plus a detailed dialog.
+Registration creates a default $200 checking account and ownership atomically. Additional accounts also open with $200. PayBot offers signed-in users read-only answers about their accounts and activity without moving funds or making account changes.

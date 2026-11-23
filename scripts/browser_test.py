@@ -30,10 +30,9 @@ try:
     browser_zone='Pacific/Honolulu'
     context=browser.new_context(viewport={'width':1440,'height':1100},timezone_id=browser_zone)
     page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
-    page.goto('http://localhost:3000');page.get_by_role('button',name='Sign in as Sai (User 1)').click()
+    page.goto('http://localhost:3000');page.get_by_role('button',name='Sign in as Sai').click()
     expect(page.get_by_role('heading',name='Hello, Sai.')).to_be_visible()
     expect(page.get_by_text('Everyday checking',exact=True)).to_be_visible()
-    expect(page.locator('.topbar-right')).to_contain_text('Simulated accounts')
     source=db("SELECT a.id,a.balance_cents FROM paylink.bank_accounts a JOIN paylink.account_holders h ON h.account_id=a.id JOIN paylink.users u ON u.id=h.user_id WHERE u.username='sai' AND a.label='Everyday checking'")[0]
     recipient=db("SELECT a.id,a.balance_cents FROM paylink.bank_accounts a JOIN paylink.account_holders h ON h.account_id=a.id JOIN paylink.users u ON u.id=h.user_id WHERE u.username='siddhardth' AND a.label='Everyday checking'")[0]
     timestamp=(datetime.now(timezone.utc)-timedelta(days=2)).replace(hour=7,minute=30,second=0,microsecond=0)
@@ -98,6 +97,20 @@ try:
     page.screenshot(path=str(ARTIFACTS/'sai-insights.png'),full_page=True)
     record('Sai history, CSV export, and seven-day insights render with data')
 
+    paybot=page.get_by_role('button',name='PayBot',exact=True)
+    paybot.click()
+    bot=page.get_by_role('dialog',name='PayBot')
+    expect(bot.get_by_label('Your question')).to_be_focused()
+    bot.get_by_role('button',name='Show my balances').click()
+    expect(bot.get_by_role('log')).to_contain_text('Total balance:')
+    bot.get_by_label('Your question').fill(f'Look up {row[0]}')
+    bot.get_by_label('Your question').press('Enter')
+    expect(bot.get_by_role('log')).to_contain_text('Sent $12.34')
+    bot.get_by_label('Your question').press('Escape')
+    expect(bot).not_to_be_visible()
+    expect(paybot).to_be_focused()
+    record('PayBot answers balances and a transfer lookup; keyboard opens questions and closes the panel')
+
     page.get_by_role('button', name='Balance', exact=True).click()
     expect(page.get_by_role('heading', name='Balances', exact=True)).to_be_visible()
     personal, joint = db("""SELECT
@@ -144,7 +157,7 @@ try:
     assert db('SELECT count(*) FROM paylink.account_holders WHERE account_id=%s',(account[0],))[0][0]==2
     record('Joint owner added through UI; one account and two ownership rows')
     page.get_by_role('button',name='Sign out').click()
-    expect(page.get_by_role('heading',name='Welcome back.')).to_be_visible()
+    expect(page.get_by_role('heading',name='Sign in to PayLink')).to_be_visible()
     page.locator('.demo-buttons button').filter(has_text='Siddhardth').click()
     expect(page.get_by_role('heading',name='Hello, Siddhardth.')).to_be_visible()
     page.get_by_role('button',name='Activity',exact=True).click()
@@ -184,7 +197,7 @@ try:
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     record('390px mobile layout, navigation, and no page overflow')
     page.get_by_role('button',name='Toggle navigation').click();page.get_by_role('button',name='Sign out').click()
-    expect(page.get_by_role('heading',name='Welcome back.')).to_be_visible()
+    expect(page.get_by_role('heading',name='Sign in to PayLink')).to_be_visible()
     page.get_by_role('button',name='Create an account',exact=True).click()
     suffix=uuid4().hex[:8];username='browser_'+suffix;registered.append(username)
     page.get_by_label('Full name',exact=True).fill('Browser Test')
@@ -199,22 +212,6 @@ try:
     assert len(starter)==1 and starter[0][1:]==(20000,20000)
     page.screenshot(path=str(ARTIFACTS/'09-new-account.png'),full_page=True)
     record('Registration automatically creates exactly one $200 checking account')
-    assert not errors,errors
-    page.set_viewport_size({'width':1440,'height':1100})
-    page.get_by_role('button',name='How to test',exact=True).first.hover()
-    expect(page.get_by_role('tooltip')).to_contain_text('$200')
-    page.screenshot(path=str(ARTIFACTS/'10-guide-preview.png'),full_page=True)
-    page.get_by_role('button',name='How to test',exact=True).first.click()
-    expect(page.get_by_role('dialog',name='How to test PayLink')).to_contain_text('Review and send $12.34')
-    page.screenshot(path=str(ARTIFACTS/'11-test-guide.png'),full_page=True)
-    page.get_by_role('button',name='Got it, let’s try it').click()
-    page.set_viewport_size({'width':390,'height':844})
-    page.get_by_role('button',name='How to test',exact=True).click()
-    expect(page.get_by_role('dialog',name='How to test PayLink')).to_be_visible()
-    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-    page.screenshot(path=str(ARTIFACTS/'12-test-guide-mobile.png'),full_page=True)
-    page.get_by_role('button',name='Close dialog').click()
-    record('How to test button provides hover tips and a complete click-through guide')
     assert not errors,errors
     record('No browser JavaScript errors')
     completed=True

@@ -8,6 +8,7 @@ import io
 import os
 import time
 from collections import defaultdict, deque
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import jwt
 from argon2 import PasswordHasher
@@ -18,6 +19,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from psycopg import errors
 from psycopg.rows import dict_row
+from . import paybot
 from psycopg_pool import ConnectionPool
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -268,9 +270,64 @@ HISTORY_SQL = '''WITH mine AS (SELECT account_id FROM paylink.account_holders WH
  JOIN paylink.bank_accounts s ON s.id=t.source_account_id
  JOIN paylink.bank_accounts d ON d.id=t.destination_account_id
  ORDER BY t.created_at DESC,t.id DESC LIMIT 200'''
+
+HISTORY_MINE = 'WITH mine AS (SELECT account_id FROM paylink.account_holders WHERE user_id=%s),'
+LOOKUP_SQL = HISTORY_MINE + '''
+ scoped AS (
+   SELECT t.*,
+          t.source_account_id IN(SELECT account_id FROM mine) AS outgoing,
+          t.destination_account_id IN(SELECT account_id FROM mine) AS incoming
+   FROM paylink.transfers t WHERE t.id=%s
+     AND (t.source_account_id IN(SELECT account_id FROM mine)
+          OR t.destination_account_id IN(SELECT account_id FROM mine)))
+ SELECT t.amount_cents,t.created_at,
+        CASE WHEN t.outgoing AND t.incoming THEN 'internal'
+             WHEN t.outgoing THEN 'sent' ELSE 'received' END AS direction,
+        COALESCE((SELECT u.full_name
+          FROM paylink.account_holders h JOIN paylink.users u ON u.id=h.user_id
+          WHERE h.account_id=CASE WHEN t.outgoing THEN t.destination_account_id ELSE t.source_account_id END
+          ORDER BY h.joined_at,u.id LIMIT 1),'Account') AS counterparty
+ FROM scoped t'''
+
+PERIOD_SQL = HISTORY_MINE + '''
+ relevant AS (
+   SELECT t.amount_cents,
+     t.source_account_id IN(SELECT account_id FROM mine) AS outgoing,
+     t.destination_account_id IN(SELECT account_id FROM mine) AS incoming
+   FROM paylink.transfers t WHERE t.created_at >= %s AND t.created_at <= %s
+     AND (t.source_account_id IN(SELECT account_id FROM mine)
+          OR t.destination_account_id IN(SELECT account_id FROM mine)))
+ SELECT coalesce(sum(amount_cents) FILTER(WHERE outgoing AND NOT incoming),0)::bigint AS sent,
+        coalesce(sum(amount_cents) FILTER(WHERE incoming AND NOT outgoing),0)::bigint AS received
+ FROM relevant'''
 @app.get('/api/transfers')
 def history(user:User):
     with pool.connection() as c: return c.execute(HISTORY_SQL,(user['id'],)).fetchall()
+
+@app.post('/api/paybot', dependencies=[Depends(rate_limit)])
+def ask_paybot(body: paybot.PayBotQuestion, user: User):
+    try:
+        tz = ZoneInfo(body.time_zone)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(422, 'Unrecognized time zone') from None
+    kind, value = paybot.understand(body.question)
+    if kind in paybot.GUIDES or (kind == 'lookup' and value is None):
+        return {'answer': paybot.LocalProvider().answer(body.question, 'lookup_help' if kind == 'lookup' else kind, None)}
+    with pool.connection() as conn:
+        conn.execute('SET TRANSACTION READ ONLY')
+        uid = user['id']
+        if kind == 'balances':
+            facts = paybot.balance_facts(conn.execute(ACCOUNT_SQL, (uid,)).fetchall(), value)
+        elif kind == 'lookup':
+            facts = [paybot.transfer_facts(row, tz) for row in conn.execute(LOOKUP_SQL, (uid, value)).fetchall()]
+        elif kind == 'period':
+            now = datetime.now(tz)
+            totals = conn.execute(PERIOD_SQL, (uid, paybot.period_start(now, value), now)).fetchone()
+            facts = {'period': value, 'sent': paybot.money(totals['sent']), 'received': paybot.money(totals['received'])}
+        else:
+            rows = conn.execute(HISTORY_SQL, (uid,)).fetchall()
+            facts = paybot.counterparty_facts(rows) if kind == 'counterparties' else [paybot.transfer_facts(row, tz) for row in rows[:5]]
+    return {'answer': paybot.provider().answer(body.question, kind, facts)}
 
 @app.get('/api/activity.csv')
 def export(user:User):

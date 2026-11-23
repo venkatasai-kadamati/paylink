@@ -44,9 +44,9 @@ def db(query,args=()):
 def screenshot(page,name):page.screenshot(path=str(ROOT/'artifacts'/('hosted-'+name+'.png')),full_page=True)
 def login(page,profile):
     page.goto(BASE,wait_until='networkidle')
-    expect(page.get_by_role('heading',name='Welcome back.')).to_be_visible()
-    expect(page.get_by_role('button',name='Sign in as Sai (User 1)')).to_be_visible()
-    expect(page.get_by_role('button',name='Sign in as Siddhardth (User 2)')).to_be_visible()
+    expect(page.get_by_role('heading',name='Sign in to PayLink')).to_be_visible()
+    expect(page.get_by_role('button',name='Sign in as Sai')).to_be_visible()
+    expect(page.get_by_role('button',name='Sign in as Siddhardth')).to_be_visible()
     screenshot(page,'01-sign-in')
     exists=db('SELECT id FROM paylink.users WHERE username=%s',(profile['username'],))
     if not exists:
