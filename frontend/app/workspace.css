@@ -580,6 +580,10 @@
   color: var(--accent-deep);
   box-shadow: 0 1px 4px #20385f18;
 }
+.page-heading h1:focus {
+  outline: none;
+  box-shadow: none;
+}
 .search-box,
 .input-search {
   position: relative;
@@ -615,6 +619,15 @@
 .search-box input {
   min-height: 48px;
   font-size: 15px;
+  padding-right: 48px;
+}
+.search-box > .icon-button {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  min-height: 44px;
 }
 .activity-advanced {
   display: flex;

@@ -50,14 +50,45 @@ try:
     dialog.get_by_role('textbox',name='Amount',exact=True).fill('999999')
     dialog.get_by_role('button',name='Review transfer').click()
     expect(dialog.get_by_role('alert')).to_contain_text('does not have enough funds')
+    expect(dialog.get_by_role('textbox',name='Amount',exact=True)).to_be_focused()
+    expect(dialog.get_by_role('textbox',name='Amount',exact=True)).to_have_attribute('aria-invalid','true')
     record('Insufficient funds blocked with visible feedback')
+    for invalid_amount in ('-1', '12.345'):
+        dialog.get_by_role('textbox',name='Amount',exact=True).fill(invalid_amount)
+        dialog.get_by_role('button',name='Review transfer').click()
+        expect(dialog.get_by_role('alert')).to_contain_text('at most two decimal places')
+    dialog.get_by_role('textbox',name='Amount',exact=True).fill('.50')
+    dialog.get_by_role('button',name='Review transfer').click()
+    expect(dialog.locator('.review-amount')).to_have_text('$0.50')
+    expect(dialog.get_by_role('heading',name='Review your transfer')).to_be_focused()
+    dialog.get_by_role('button',name='Edit details').click()
+    record('Amount boundaries, decimal shorthand, edit path and step focus')
     dialog.get_by_role('textbox',name='Amount',exact=True).fill('12.34')
     dialog.get_by_placeholder('e.g. Lunch').fill('Browser validation — lunch split')
     dialog.get_by_role('button',name='Review transfer').click()
     expect(dialog.get_by_role('heading',name='Review your transfer')).to_be_visible()
     page.screenshot(path=str(ARTIFACTS/'04-transfer-review.png'),full_page=False)
+    transfer_attempts=[]
+    def lose_first_confirmation(route):
+        if route.request.method!='POST':
+            route.continue_();return
+        transfer_attempts.append(route.request.post_data_json)
+        response=route.fetch()
+        if len(transfer_attempts)==1:
+            assert response.ok
+            route.abort('failed')  # The transfer committed, but its response was lost.
+        else:
+            route.fulfill(response=response)
+    page.route('**/api/transfers',lose_first_confirmation)
     dialog.get_by_role('button',name='Confirm & send').click()
+    expect(dialog.get_by_role('alert')).to_contain_text('couldn’t confirm the result')
+    expect(dialog.get_by_role('button',name='Edit details')).to_have_count(0)
+    dialog.get_by_role('button',name='Retry confirmation').click()
     expect(dialog.get_by_role('heading',name='Transfer completed')).to_be_visible()
+    page.unroute('**/api/transfers',lose_first_confirmation)
+    assert len(transfer_attempts)==2 and transfer_attempts[0]==transfer_attempts[1]
+    assert db('SELECT count(*) FROM paylink.transfers WHERE idempotency_key=%s',(transfer_attempts[0]['idempotency_key'],))[0][0]==1
+    record('Lost response recovers with the same payment key and exactly one debit')
     row=db("SELECT id,amount_cents FROM paylink.transfers WHERE memo='Browser validation — lunch split' ORDER BY created_at DESC LIMIT 1")[0]
     transfer_ids.append(row[0]);assert row[1]==1234
     assert db('SELECT balance_cents FROM paylink.bank_accounts WHERE id=%s',(source[0],))[0][0]==source[1]-1234
@@ -68,6 +99,9 @@ try:
     dialog.get_by_role('button',name='Back to overview').click()
     page.reload();expect(page.get_by_role('heading',name='Hello, Sai.')).to_be_visible()
     page.get_by_role('button',name='Activity',exact=True).click()
+    page.get_by_role('textbox',name='Search activity').fill(str(row[0]))
+    expect(page.locator('tbody tr')).to_have_count(1)
+    page.get_by_role('button',name='Clear activity search').click()
     page.get_by_role('textbox',name='Search activity').fill('Browser validation')
     expect(page.get_by_role('button',name='Siddhardth Browser validation')).to_be_visible()
     local_date_label=f'{local_day:%b} {local_day.day}'

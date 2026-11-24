@@ -227,11 +227,13 @@ export function TransferReceipt({
   accounts,
   hidden,
   onUpdated,
+  onPendingChange,
 }: {
   transfer: Transfer;
   accounts: Account[];
   hidden: boolean;
   onUpdated: () => void;
+  onPendingChange: (pending: boolean) => void;
 }) {
   const [ledger, setLedger] = useState<Ledger | null>(null),
     [error, setError] = useState(""),
@@ -241,6 +243,7 @@ export function TransferReceipt({
     [busy, setBusy] = useState(false),
     [version, setVersion] = useState(0);
   const key = useRef("");
+  const submitting = useRef(false);
   useEffect(() => {
     let cancelled = false;
     setError("");
@@ -261,7 +264,10 @@ export function TransferReceipt({
     accounts.some((a) => a.id === received.account_id && a.active) &&
     !ledger?.reversal;
   async function reverse() {
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
+    onPendingChange(true);
     setError("");
     if (!key.current) key.current = crypto.randomUUID();
     try {
@@ -275,7 +281,9 @@ export function TransferReceipt({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      submitting.current = false;
       setBusy(false);
+      onPendingChange(false);
     }
   }
   return (
@@ -385,6 +393,9 @@ export function TransferReceipt({
         <Copy size={16} />
         {copied ? "Reference copied" : "Copy transfer ID"}
       </button>
+      <span className="sr-only" role="status">
+        {copied ? "Transfer reference copied to clipboard." : ""}
+      </span>
       {canReturn && !returning && (
         <button
           className="button ghost full return-trigger"
@@ -413,6 +424,7 @@ export function TransferReceipt({
             Reason
             <input
               value={reason}
+              disabled={busy}
               onChange={(e) => {
                 setReason(e.target.value);
                 key.current = "";
@@ -441,7 +453,7 @@ export function TransferReceipt({
               ) : (
                 <ArrowDownLeft size={16} />
               )}
-              Confirm return
+              {busy ? "Returning payment…" : "Confirm return"}
             </button>
           </div>
         </form>

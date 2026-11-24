@@ -96,6 +96,14 @@ const initials = (s: string) =>
     .slice(0, 2)
     .join("")
     .toUpperCase();
+class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const r = await fetch("/api" + path, {
     signal: AbortSignal.timeout(options.method === "POST" ? 60000 : 15000),
@@ -106,10 +114,11 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
     const b = await r.json().catch(() => ({
       detail: "Unable to reach the server. Please try again.",
     }));
-    throw new Error(
+    throw new ApiError(
       typeof b.detail === "string"
         ? b.detail
         : "Please check the fields and try again.",
+      r.status,
     );
   }
   return r.json();
@@ -150,17 +159,21 @@ function Modal({
   onClose,
   children,
   className = "",
+  busy = false,
+  focusKey,
 }: {
   title: string;
   eyebrow?: string;
   onClose: () => void;
   children: React.ReactNode;
   className?: string;
+  busy?: boolean;
+  focusKey?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     const before = document.activeElement as HTMLElement;
-    ref.current?.focus();
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
@@ -168,11 +181,16 @@ function Modal({
       before?.focus();
     };
   }, []);
+  useEffect(() => {
+    const target = ref.current?.querySelector<HTMLElement>("[data-autofocus]");
+    (target || heading.current)?.focus();
+    ref.current?.scrollTo({ top: 0 });
+  }, [title, focusKey]);
   return (
     <div
       className="modal-backdrop"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (!busy && e.target === e.currentTarget) onClose();
       }}
     >
       <div
@@ -183,22 +201,32 @@ function Modal({
         aria-label={title}
         tabIndex={-1}
         onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
+          if (e.key === "Escape" && !busy) onClose();
           if (e.key === "Tab") {
             const els = ref.current?.querySelectorAll<HTMLElement>(
-              "button:not(:disabled),input,select,a[href],textarea",
+              "button:not(:disabled),input:not(:disabled),select:not(:disabled),a[href],textarea:not(:disabled)",
             );
-            if (!els?.length) return;
+            if (!els?.length) {
+              e.preventDefault();
+              ref.current?.focus();
+              return;
+            }
             const first = els[0],
               last = els[els.length - 1];
             if (
               e.shiftKey &&
               (document.activeElement === first ||
-                document.activeElement === ref.current)
+                document.activeElement === ref.current ||
+                document.activeElement === heading.current)
             ) {
               e.preventDefault();
               last.focus();
-            } else if (!e.shiftKey && document.activeElement === last) {
+            } else if (
+              !e.shiftKey &&
+              (document.activeElement === last ||
+                document.activeElement === heading.current ||
+                document.activeElement === ref.current)
+            ) {
               e.preventDefault();
               first.focus();
             }
@@ -208,12 +236,15 @@ function Modal({
         <button
           className="icon-button close"
           aria-label="Close dialog"
+          disabled={busy}
           onClick={onClose}
         >
           <X size={20} />
         </button>
         {eyebrow && <div className="eyebrow">{eyebrow}</div>}
-        <h2>{title}</h2>
+        <h2 ref={heading} tabIndex={-1}>
+          {title}
+        </h2>
         {children}
       </div>
     </div>
@@ -247,6 +278,7 @@ export default function Home() {
     [accountFilter, setAccountFilter] = useState(""),
     [startDate, setStartDate] = useState(""),
     [endDate, setEndDate] = useState("");
+  const [receiptBusy, setReceiptBusy] = useState(false);
   const sidebar = useRef<HTMLElement>(null);
   const sessionVersion = useRef(0);
   const mobileToggle = useRef<HTMLButtonElement>(null);
@@ -360,6 +392,9 @@ export default function Home() {
     const t = setTimeout(() => setToast(""), 5000);
     return () => clearTimeout(t);
   }, [toast]);
+  useEffect(() => {
+    if (user) document.querySelector<HTMLElement>(".page-heading h1")?.focus();
+  }, [tab, user?.id]);
   if (!user)
     return (
       <Auth
@@ -393,7 +428,7 @@ export default function Home() {
             Received: "received",
             "Between accounts": "internal",
           }[filter]) &&
-      `${t.counterparty} ${t.memo} ${t.source_label} ${t.destination_label}`
+      `${t.counterparty} ${t.memo} ${t.source_label} ${t.destination_label} ${t.id}`
         .toLowerCase()
         .includes(search.toLowerCase()),
   );
@@ -562,7 +597,7 @@ export default function Home() {
         >
           <div className="page-heading">
             <div>
-              <h1>
+              <h1 tabIndex={-1}>
                 {tab === "Overview"
                   ? `Hello, ${user.full_name.split(" ")[0]}.`
                   : tab === "Activity"
@@ -941,10 +976,19 @@ export default function Home() {
                       <Search size={16} />
                       <input
                         aria-label="Search activity"
-                        placeholder="Search activity"
+                        placeholder="Search name, note or reference"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                       />
+                      {search && (
+                        <button
+                          className="icon-button"
+                          aria-label="Clear activity search"
+                          onClick={() => setSearch("")}
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
                     </div>
                   </div>
                   {tab === "Activity" && (
@@ -988,13 +1032,19 @@ export default function Home() {
                           onChange={(e) => setEndDate(e.target.value)}
                         />
                       </label>
-                      {(accountFilter || startDate || endDate) && (
+                      {(accountFilter ||
+                        startDate ||
+                        endDate ||
+                        search ||
+                        filter !== "All activity") && (
                         <button
                           className="text-button"
                           onClick={() => {
                             setAccountFilter("");
                             setStartDate("");
                             setEndDate("");
+                            setSearch("");
+                            setFilter("All activity");
                           }}
                         >
                           Reset filters
@@ -1084,13 +1134,21 @@ export default function Home() {
                     <div className="empty">
                       <ArrowLeftRight size={25} />
                       <h3>
-                        {search || filter !== "All activity"
+                        {search ||
+                        accountFilter ||
+                        startDate ||
+                        endDate ||
+                        filter !== "All activity"
                           ? "No matching activity."
                           : "No transfers yet."}
                       </h3>
                       <p>
-                        {search
-                          ? "Try a different name or note."
+                        {search ||
+                        accountFilter ||
+                        startDate ||
+                        endDate ||
+                        filter !== "All activity"
+                          ? "Try another search or reset your filters to see more transfers."
                           : "Send to someone or move money between your accounts."}
                       </p>
                     </div>
@@ -1134,7 +1192,18 @@ export default function Home() {
           mode={transferMode}
           accounts={accounts}
           onClose={() => setTransferMode(null)}
-          onDone={done}
+          onCommitted={refresh}
+          onDone={() => {
+            setTransferMode(null);
+            nav("Overview");
+            setToast("Transfer completed.");
+          }}
+          onActivity={(id) => {
+            setTransferMode(null);
+            nav("Activity");
+            setSearch(id || "");
+            refresh();
+          }}
         />
       )}
       {share && (
@@ -1174,13 +1243,18 @@ export default function Home() {
         </Modal>
       )}
       {detail && (
-        <Modal title="Transfer details" onClose={() => setDetail(null)}>
+        <Modal
+          title="Transfer details"
+          busy={receiptBusy}
+          onClose={() => setDetail(null)}
+        >
           <TransferReceipt
             key={detail.id}
             transfer={detail}
             accounts={accounts}
             hidden={hidden}
             onUpdated={refresh}
+            onPendingChange={setReceiptBusy}
           />
         </Modal>
       )}
@@ -1205,11 +1279,15 @@ function TransferModal({
   accounts,
   onClose,
   onDone,
+  onCommitted,
+  onActivity,
 }: {
   mode: "send" | "internal";
   accounts: Account[];
   onClose: () => void;
   onDone: () => void;
+  onCommitted: () => void;
+  onActivity: (id?: string) => void;
 }) {
   const [step, setStep] = useState(1),
     [q, setQ] = useState(""),
@@ -1221,41 +1299,61 @@ function TransferModal({
     [memo, setMemo] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
+    [amountError, setAmountError] = useState(""),
+    [unconfirmed, setUnconfirmed] = useState(false),
+    [copied, setCopied] = useState(false),
     [searched, setSearched] = useState(false),
-    [receipt, setReceipt] = useState<{ id: string } | null>(null);
+    [receipt, setReceipt] = useState<{
+      id: string;
+      created_at?: string;
+    } | null>(null);
   const key = useRef<string>("");
+  const sending = useRef(false);
+  const searchVersion = useRef(0);
+  const amountInput = useRef<HTMLInputElement>(null);
   const selected = accounts.find((a) => a.id === source);
   const amountCents = Math.round(Number(amount) * 100);
   const ownDest = accounts.find((a) => a.id === dest);
   const destination = mode === "send" ? recipient?.account_id : dest;
+  const stages =
+    mode === "send" ? ["Recipient", "Amount", "Review"] : ["Details", "Review"];
+  const currentStage = mode === "send" ? step - 1 : step === 3 ? 1 : 0;
   async function search(e: FormEvent) {
     e.preventDefault();
+    const version = ++searchVersion.current;
     setBusy(true);
     setError("");
     setRecipient(null);
+    setResults([]);
+    setSearched(false);
     try {
-      setResults(
-        await api<Recipient[]>("/recipients?q=" + encodeURIComponent(q)),
+      const recipients = await api<Recipient[]>(
+        "/recipients?q=" + encodeURIComponent(q.trim()),
       );
-      setSearched(true);
+      if (version === searchVersion.current) {
+        setResults(recipients);
+        setSearched(true);
+      }
     } catch (e) {
-      setError((e as Error).message);
+      if (version === searchVersion.current) setError((e as Error).message);
     } finally {
-      setBusy(false);
+      if (version === searchVersion.current) setBusy(false);
     }
   }
   function review(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setAmountError("");
     if (
-      !/^\d+(\.\d{1,2})?$/.test(amount) ||
+      !/^(?:\d+\.?\d{0,2}|\.\d{1,2})$/.test(amount.trim()) ||
       !Number.isSafeInteger(amountCents) ||
       amountCents < 1 ||
       amountCents > 100000000
     ) {
-      setError(
+      setAmountError(
         "Enter an amount between $0.01 and $1,000,000, with at most two decimal places.",
       );
+      amountInput.current?.focus();
       return;
     }
     if (!destination || !source) {
@@ -1267,19 +1365,23 @@ function TransferModal({
       return;
     }
     if (amountCents > Number(selected?.balance_cents || 0)) {
-      setError(
+      setAmountError(
         "This account does not have enough funds. Try a smaller amount.",
       );
+      amountInput.current?.focus();
       return;
     }
+    setAmount((amountCents / 100).toFixed(2));
     key.current = crypto.randomUUID();
     setStep(3);
   }
   async function send() {
+    if (sending.current) return;
+    sending.current = true;
     setBusy(true);
     setError("");
     try {
-      const r = await api<{ id: string }>(
+      const r = await api<{ id: string; created_at?: string }>(
         "/transfers",
         post({
           source_account_id: source,
@@ -1290,10 +1392,19 @@ function TransferModal({
         }),
       );
       setReceipt(r);
+      setUnconfirmed(false);
       setStep(4);
+      onCommitted();
     } catch (e) {
-      setError((e as Error).message);
+      const unknown = !(e instanceof ApiError) || e.status >= 500;
+      setUnconfirmed(unknown);
+      setError(
+        unknown
+          ? "We couldn’t confirm the result yet. Retry confirmation to check the same transfer, or check Activity before starting another payment."
+          : (e as Error).message,
+      );
     } finally {
+      sending.current = false;
       setBusy(false);
     }
   }
@@ -1310,7 +1421,25 @@ function TransferModal({
       }
       onClose={step === 4 ? onDone : onClose}
       className="transfer-modal"
+      busy={busy && step === 3}
+      focusKey={step}
     >
+      {step < 4 && (
+        <ol className="transfer-steps" aria-label="Transfer progress">
+          {stages.map((label, i) => (
+            <li
+              key={label}
+              aria-current={i === currentStage ? "step" : undefined}
+              className={i < currentStage ? "complete" : ""}
+            >
+              <span aria-hidden="true">
+                {i < currentStage ? <Check size={14} /> : i + 1}
+              </span>
+              {label}
+            </li>
+          ))}
+        </ol>
+      )}
       {step === 1 && mode === "send" ? (
         <>
           <p className="muted">
@@ -1322,10 +1451,13 @@ function TransferModal({
               <div className="input-search">
                 <Search size={17} />
                 <input
-                  autoFocus
+                  data-autofocus
                   value={q}
                   onChange={(e) => {
                     setQ(e.target.value);
+                    searchVersion.current++;
+                    setBusy(false);
+                    setError("");
                     setSearched(false);
                     setRecipient(null);
                     setResults([]);
@@ -1353,6 +1485,7 @@ function TransferModal({
                   recipient?.account_id === r.account_id ? "chosen" : ""
                 }
                 onClick={() => setRecipient(r)}
+                aria-pressed={recipient?.account_id === r.account_id}
               >
                 <span className="avatar">{initials(r.full_name)}</span>
                 <div>
@@ -1378,7 +1511,10 @@ function TransferModal({
           <button
             className="button primary full"
             disabled={!recipient}
-            onClick={() => setStep(2)}
+            onClick={() => {
+              setError("");
+              setStep(2);
+            }}
           >
             Continue
             <ArrowRight size={17} />
@@ -1400,7 +1536,11 @@ function TransferModal({
               <button
                 type="button"
                 className="text-button"
-                onClick={() => setStep(1)}
+                onClick={() => {
+                  setError("");
+                  setAmountError("");
+                  setStep(1);
+                }}
               >
                 Change
               </button>
@@ -1412,6 +1552,7 @@ function TransferModal({
               value={source}
               onChange={(e) => {
                 setSource(e.target.value);
+                setAmountError("");
                 if (dest === e.target.value) setDest("");
               }}
               required
@@ -1485,22 +1626,36 @@ function TransferModal({
           )}
           <label>
             Amount
-            <div className="amount-input">
+            <div className={"amount-input" + (amountError ? " invalid" : "")}>
               <span>$</span>
               <input
                 aria-label="Amount"
+                aria-invalid={!!amountError}
+                aria-describedby={
+                  amountError ? "amount-error amount-hint" : "amount-hint"
+                }
+                ref={amountInput}
+                data-autofocus
                 inputMode="decimal"
                 placeholder="0.00"
                 required
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  setAmountError("");
+                }}
               />
               <small>USD</small>
             </div>
-            <span className="field-hint">
+            <span className="field-hint" id="amount-hint">
               {money(selected?.balance_cents || 0)} available
             </span>
           </label>
+          {amountError && (
+            <p className="field-error" id="amount-error" role="alert">
+              {amountError}
+            </p>
+          )}
           <label>
             Note <span className="optional">Optional</span>
             <input
@@ -1565,10 +1720,15 @@ function TransferModal({
               <dd>$0.00</dd>
             </div>
             <div>
-              <dt>Available after transfer</dt>
+              <dt>Estimated balance after</dt>
               <dd>{money((selected?.balance_cents || 0) - amountCents)}</dd>
             </div>
           </dl>
+          <p className="transfer-confirm-note">
+            {mode === "send"
+              ? "Check the recipient and amount before confirming."
+              : "Move money between your accounts with no change to your total balance."}
+          </p>
           {error && (
             <div className="error" role="alert">
               {error}
@@ -1577,23 +1737,42 @@ function TransferModal({
           <button
             className="button primary full"
             disabled={busy}
+            aria-busy={busy}
             onClick={send}
           >
             {busy ? (
-              <Spinner />
+              <>
+                <Spinner />
+                <span>Sending transfer…</span>
+              </>
             ) : (
               <>
-                Confirm & send
+                <span>
+                  {unconfirmed
+                    ? "Retry confirmation"
+                    : `Confirm & send ${money(amountCents)}`}
+                </span>
                 <ArrowUpRight size={17} />
               </>
             )}
           </button>
+          {busy && (
+            <p className="transfer-confirm-note" role="status">
+              Waiting for confirmation. Your receipt will appear here.
+            </p>
+          )}
           <button
             className="button ghost full"
             disabled={busy}
-            onClick={() => setStep(mode === "internal" ? 1 : 2)}
+            onClick={() => {
+              if (unconfirmed) onActivity();
+              else {
+                setError("");
+                setStep(mode === "internal" ? 1 : 2);
+              }
+            }}
           >
-            Edit details
+            {unconfirmed ? "Check Activity" : "Edit details"}
           </button>
         </>
       )}
@@ -1610,7 +1789,42 @@ function TransferModal({
           <div className="receipt-mini">
             Transfer ID<span className="mono">{receipt?.id}</span>
           </div>
-          <button className="button primary full" onClick={onDone}>
+          {receipt?.created_at && (
+            <p className="transfer-confirm-note">
+              {new Date(receipt.created_at).toLocaleString()}
+            </p>
+          )}
+          <button
+            className="button secondary full"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(receipt!.id);
+                setCopied(true);
+                setError("");
+              } catch {
+                setError("Select the transfer ID above to copy it.");
+              }
+            }}
+          >
+            <Copy size={16} />
+            {copied ? "Reference copied" : "Copy transfer ID"}
+          </button>
+          <span className="sr-only" role="status">
+            {copied ? "Transfer reference copied to clipboard." : ""}
+          </span>
+          {error && (
+            <p className="field-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button
+            className="button primary full"
+            onClick={() => onActivity(receipt?.id)}
+          >
+            View in Activity
+            <ArrowRight size={17} />
+          </button>
+          <button className="button ghost full" onClick={onDone}>
             Back to overview
             <ArrowRight size={17} />
           </button>
@@ -1660,65 +1874,71 @@ function LinkModal({
       title="Open an account"
       eyebrow="LINK A SIMULATED ACCOUNT"
       onClose={onClose}
+      busy={busy}
     >
       <p className="muted">Choose a simulated bank and name the account.</p>
       <form onSubmit={submit}>
-        <label>
-          Bank
-          <select name="bank_id" required defaultValue="">
-            <option value="" disabled>
-              Select a simulated bank
-            </option>
-            {banks.map((b) => (
-              <option value={b.id} key={b.id}>
-                {b.name}
+        <fieldset className="pending-fields" disabled={busy}>
+          <label>
+            Bank
+            <select name="bank_id" required defaultValue="">
+              <option value="" disabled>
+                Select a simulated bank
               </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Account type
-          <select name="account_type">
-            <option value="checking">Checking</option>
-            <option value="savings">Savings</option>
-          </select>
-        </label>
-        <label>
-          Give it a name
-          <input
-            name="label"
-            placeholder="e.g. Weekend adventures"
-            minLength={1}
-            maxLength={60}
-            required
-          />
-        </label>
-        <div className="info-note">
-          <Landmark size={20} />
-          <span>
-            Your opening balance will be <b>$200</b> in simulated funds. No bank
-            credentials are needed. You can hold up to four accounts, including
-            shared accounts.
-          </span>
-        </div>
-        {error && (
-          <div className="error" role="alert">
-            {error}
+              {banks.map((b) => (
+                <option value={b.id} key={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Account type
+            <select name="account_type">
+              <option value="checking">Checking</option>
+              <option value="savings">Savings</option>
+            </select>
+          </label>
+          <label>
+            Give it a name
+            <input
+              name="label"
+              placeholder="e.g. Weekend adventures"
+              minLength={1}
+              maxLength={60}
+              required
+            />
+          </label>
+          <div className="info-note">
+            <Landmark size={20} />
+            <span>
+              Your opening balance will be <b>$200</b> in simulated funds. No
+              bank credentials are needed. You can hold up to four accounts,
+              including shared accounts.
+            </span>
           </div>
-        )}
-        <button
-          className="button primary full"
-          disabled={busy || banks.length === 0}
-        >
-          {busy ? (
-            <Spinner />
-          ) : (
-            <>
-              Create simulated account
-              <Plus size={17} />
-            </>
+          {error && (
+            <div className="error" role="alert">
+              {error}
+            </div>
           )}
-        </button>
+          <button
+            className="button primary full"
+            disabled={busy || banks.length === 0}
+          >
+            {busy ? (
+              <>
+                <Spinner />
+                Creating account…
+              </>
+            ) : (
+              <>
+                Create simulated account
+                <Plus size={17} />
+              </>
+            )}
+          </button>
+        </fieldset>
       </form>
     </Modal>
   );
@@ -1759,49 +1979,59 @@ function ShareModal({
       title="Invite a joint owner"
       eyebrow="SIMULATED JOINT OWNERSHIP"
       onClose={onClose}
+      busy={busy}
     >
       <p className="muted">
         Invite a registered user to share this account. They must accept before
         they can view or spend its balance.
       </p>
       <form onSubmit={submit}>
-        <label>
-          Account to share
-          <select
-            name="account_id"
-            required
-            defaultValue={initialAccount || undefined}
-          >
-            {accounts
-              .filter((a) => a.active)
-              .map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.label} · ••{a.last4}
-                </option>
-              ))}
-          </select>
-        </label>
-        <label>
-          New owner's username
-          <input
-            name="username"
-            required
-            pattern="[a-z][a-z0-9_]{2,29}"
-            placeholder="Exact registered username"
-          />
-        </label>
-        <p className="form-footnote">
-          Invitations expire in 7 days. You can cancel a pending invitation from
-          Accounts.
-        </p>
-        {error && (
-          <div className="error" role="alert">
-            {error}
-          </div>
-        )}
-        <button className="button primary full" disabled={busy}>
-          {busy ? <Spinner /> : "Send invitation"}
-        </button>
+        <fieldset className="pending-fields" disabled={busy}>
+          <label>
+            Account to share
+            <select
+              name="account_id"
+              required
+              defaultValue={initialAccount || undefined}
+            >
+              {accounts
+                .filter((a) => a.active)
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label} · ••{a.last4}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label>
+            New owner's username
+            <input
+              name="username"
+              required
+              pattern="[a-z][a-z0-9_]{2,29}"
+              placeholder="Exact registered username"
+            />
+          </label>
+          <p className="form-footnote">
+            Invitations expire in 7 days. You can cancel a pending invitation
+            from Accounts.
+          </p>
+          {error && (
+            <div className="error" role="alert">
+              {error}
+            </div>
+          )}
+          <button className="button primary full" disabled={busy}>
+            {busy ? (
+              <>
+                <Spinner />
+                Sending invitation…
+              </>
+            ) : (
+              "Send invitation"
+            )}
+          </button>
+        </fieldset>
       </form>
     </Modal>
   );

@@ -410,6 +410,95 @@ select:focus {
 .transfer-modal {
   width: min(100%, 600px);
 }
+.modal > h2:focus {
+  outline: none;
+  box-shadow: none;
+}
+.transfer-steps {
+  display: flex;
+  gap: 12px;
+  list-style: none;
+  margin: 0 0 24px;
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+.transfer-steps li {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.transfer-steps li > span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-size: 12px;
+}
+.transfer-steps [aria-current="step"] {
+  color: var(--accent-deep);
+  font-weight: 600;
+}
+.transfer-steps [aria-current="step"] > span {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.transfer-steps .complete > span {
+  color: var(--positive);
+  border-color: var(--positive);
+}
+.amount-input.invalid {
+  border-color: var(--error);
+  box-shadow: 0 0 0 1px var(--error);
+}
+.field-error {
+  color: var(--error);
+  font-size: 14px;
+  margin: 8px 0 0;
+}
+.transfer-confirm-note {
+  color: var(--muted);
+  text-align: center;
+  font-size: 14px;
+  margin: 16px 0 0;
+}
+.transfer-modal .review-amount {
+  font-size: clamp(28px, 7vw, 42px);
+  overflow-wrap: anywhere;
+}
+.recipient-list strong,
+.recipient-summary strong,
+.review-to,
+.receipt-mini .mono {
+  overflow-wrap: anywhere;
+}
+fieldset.pending-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+.transfer-modal .button.full {
+  white-space: normal;
+}
+@media (max-width: 480px) {
+  .transfer-steps li {
+    flex-direction: column;
+    text-align: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+  .transfer-steps li > span {
+    flex-basis: auto;
+    width: 26px;
+  }
+}
 .recipient-list {
   display: grid;
   gap: 10px;
@@ -495,12 +584,44 @@ select:focus {
   padding: 4px 16px;
   margin-top: 8px;
 }
-.amount-input:focus-within { outline: 3px solid var(--focus); outline-offset: 3px; }
-.amount-input > span { font-size: 26px; color: var(--muted); }
-.amount-input input { width: 0; flex: 1; min-width: 0; border: 0; margin: 0; padding: 10px 0; outline: 0; box-shadow: none; background: transparent; }
-.amount-input input:focus-visible { outline: 0; box-shadow: none; }
-.amount-input small { flex-shrink: 0; font-size: 14px; color: var(--muted); }
-.session-notice { position: absolute; inset: 0 0 auto; z-index: 5; background: var(--tint); color: var(--ink); padding: 8px 16px; text-align: center; font-size: 14px; }
+.amount-input:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+.amount-input > span {
+  font-size: 26px;
+  color: var(--muted);
+}
+.amount-input input {
+  width: 0;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 10px 0;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.amount-input input:focus-visible {
+  outline: 0;
+  box-shadow: none;
+}
+.amount-input small {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.session-notice {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 5;
+  background: var(--tint);
+  color: var(--ink);
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 14px;
+}
 .review-amount,
 .receipt-amount {
   margin: 16px 0 8px;
