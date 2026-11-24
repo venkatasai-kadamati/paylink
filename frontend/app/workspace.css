@@ -525,7 +525,8 @@
   font-size: 27px;
   font-weight: 500;
   letter-spacing: -0.035em;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 .add-account-card {
   display: flex;
@@ -2011,6 +2012,7 @@ tbody tr:last-child td {
   }
   .account-balance {
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
