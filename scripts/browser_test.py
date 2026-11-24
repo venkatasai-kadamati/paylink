@@ -48,7 +48,7 @@ try:
     cookie_before=next(c['value'] for c in context.cookies() if c['name']=='paylink_session')
     page.route('**/api/workspace?*',lambda route:route.fulfill(status=503,json={'detail':'Reconnect test: temporarily unavailable'}))
     page.reload()
-    expect(page.get_by_role('alert')).to_contain_text('Reconnect test')
+    expect(page.locator('.session-content [role="alert"]')).to_contain_text('Reconnect test')
     expect(page.get_by_role('heading',name='Opening your workspace')).to_be_visible()
     expect(page.get_by_role('heading',name='Welcome back')).to_have_count(0)
     assert next(c['value'] for c in context.cookies() if c['name']=='paylink_session')==cookie_before
