@@ -486,6 +486,15 @@ export default function Home() {
           ].map(({ name, icon: Icon }) => (
             <button
               key={name}
+              aria-label={name}
+              aria-describedby={
+                name === "Accounts" &&
+                invitations.some(
+                  (i) => i.status === "pending" && i.invitee_id === user.id,
+                )
+                  ? "pending-joint-requests"
+                  : undefined
+              }
               className={tab === name ? "active" : ""}
               onClick={() => nav(name)}
               aria-current={tab === name ? "page" : undefined}
@@ -496,7 +505,10 @@ export default function Home() {
                 invitations.some(
                   (i) => i.status === "pending" && i.invitee_id === user.id,
                 ) && (
-                  <span className="nav-count">
+                  <span className="nav-count" id="pending-joint-requests">
+                    <span className="sr-only">
+                      Pending joint account requests:{" "}
+                    </span>
                     {
                       invitations.filter(
                         (i) =>
