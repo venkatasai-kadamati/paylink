@@ -485,6 +485,22 @@ select:focus {
   font-size: 28px;
   font-weight: 500;
 }
+.amount-input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #aebacd;
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 4px 16px;
+  margin-top: 8px;
+}
+.amount-input:focus-within { outline: 3px solid var(--focus); outline-offset: 3px; }
+.amount-input > span { font-size: 26px; color: var(--muted); }
+.amount-input input { width: 0; flex: 1; min-width: 0; border: 0; margin: 0; padding: 10px 0; outline: 0; box-shadow: none; background: transparent; }
+.amount-input input:focus-visible { outline: 0; box-shadow: none; }
+.amount-input small { flex-shrink: 0; font-size: 14px; color: var(--muted); }
+.session-notice { position: absolute; inset: 0 0 auto; z-index: 5; background: var(--tint); color: var(--ink); padding: 8px 16px; text-align: center; font-size: 14px; }
 .review-amount,
 .receipt-amount {
   margin: 16px 0 8px;

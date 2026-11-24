@@ -113,7 +113,7 @@ export function InvitationCenter({
     <section className="invitations-panel">
       <div className="section-heading">
         <div>
-          <h2>Shared, on your terms.</h2>
+          <h2>Joint account requests</h2>
           <p className="muted">
             An account becomes joint only after an invitation is accepted.
           </p>

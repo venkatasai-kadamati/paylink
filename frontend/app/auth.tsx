@@ -1,5 +1,5 @@
 "use client";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   ArrowLeftRight,
   ArrowRight,
@@ -13,16 +13,29 @@ import {
   Users,
 } from "lucide-react";
 
-export function Auth({ onLogin }: { onLogin: () => void }) {
+export function Auth({
+  onLogin,
+  restoring = false,
+}: {
+  onLogin: (user: { id: string; username: string; full_name: string }) => void;
+  restoring?: boolean;
+}) {
   const [register, setRegister] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [show, setShow] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    // Wake the preview API without blocking the sign-in interface.
+    fetch("/api/health", { signal: controller.signal }).catch(() => {});
+    return () => controller.abort();
+  }, []);
   async function request(path: string, data: unknown) {
     setBusy(true);
     setError("");
     try {
       const r = await fetch("/api/auth/" + path, {
+        signal: AbortSignal.timeout(60000),
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -35,9 +48,13 @@ export function Auth({ onLogin }: { onLogin: () => void }) {
             : "Please check your details and try again.",
         );
       }
-      onLogin();
+      onLogin(await r.json());
     } catch (e) {
-      setError((e as Error).message);
+      setError(
+        (e as Error).name === "TimeoutError"
+          ? "The server is taking longer to respond. Please try again."
+          : (e as Error).message,
+      );
     } finally {
       setBusy(false);
     }
@@ -51,6 +68,11 @@ export function Auth({ onLogin }: { onLogin: () => void }) {
   }
   return (
     <main className="auth-layout">
+      {restoring && (
+        <div className="session-notice" role="status">
+          Checking your existing session. You can still sign in below.
+        </div>
+      )}
       <section className="auth-story" aria-label="About PayLink">
         <a className="logo" href="/">
           <span className="logo-mark">

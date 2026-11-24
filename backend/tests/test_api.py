@@ -108,6 +108,18 @@ def test_registered_workflow_authorization_insights_csv():
             monthly=c.get('/api/insights').json()['monthly']
             assert monthly['sent_cents']-before['sent_cents']==1234
             assert monthly['received_cents']==before['received_cents']
+            report=c.get('/api/insights/report',params={'days':7,'time_zone':'Pacific/Honolulu'})
+            assert report.status_code==200,report.text
+            report=report.json()
+            assert len(report['daily'])==7
+            assert report['summary']=={'sent_cents':1234,'received_cents':0,'transfer_count':1}
+            assert sum(day['sent_cents'] for day in report['daily'])==1234
+            assert report['counterparties'][0]['name']=='Recipient'
+            assert c.get('/api/insights/report',params={'days':90}).json()['period']['days']==90
+            assert c.get('/api/insights/report',params={'account_id':b}).json()['summary']['transfer_count']==0
+            assert c.get('/api/insights/report',params={'account_id':dest}).status_code==404
+            assert c.get('/api/insights/report',params={'days':8}).status_code==422
+            assert c.get('/api/insights/report',params={'time_zone':'Unknown/Zone'}).status_code==422
             assert monthly['transfer_count']-before['transfer_count']==2
             rows=c.get('/api/transfers').json()
             assert len(rows)==2 and {x['direction'] for x in rows}=={'sent','internal'}
@@ -144,6 +156,11 @@ def test_registered_workflow_authorization_insights_csv():
             detail=c.get(f'/api/transfers/{original}/detail').json()
             assert detail['reversal']==reversal.json()
             assert [p['delta_cents'] for p in detail['postings']]==[-1234,1234]
+            with psycopg.connect(C['ADMIN_DATABASE_URL']) as conn:
+                conn.execute("UPDATE paylink.transfers SET created_at=CURRENT_TIMESTAMP-interval '40 days' WHERE id=%s",(original,))
+            comparison=c.get('/api/insights/report',params={'days':30}).json()
+            assert comparison['summary']=={'sent_cents':0,'received_cents':1234,'transfer_count':1}
+            assert comparison['previous']=={'sent_cents':1234,'received_cents':0,'transfer_count':1}
     finally:
         with psycopg.connect(C['ADMIN_DATABASE_URL']) as conn:
             conn.execute('DELETE FROM paylink.account_invitations WHERE inviter_id=ANY(%s::uuid[])',(ids,))

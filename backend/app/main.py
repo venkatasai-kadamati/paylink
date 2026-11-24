@@ -418,6 +418,45 @@ def export(user:User):
 
 SET_LOCAL_TIME_ZONE = "SELECT set_config('TimeZone', %s, true)"
 
+@app.get('/api/insights/report')
+def insight_report(user:User, days:Annotated[int,Query(ge=7,le=90)]=30, account_id:UUID|None=None,
+                   time_zone: Annotated[str | None, Query(min_length=1,max_length=100)] = None):
+    """Complete scoped cash-flow aggregates, independent of the history page limit."""
+    if days not in (7,30,90): raise HTTPException(422,'Choose 7, 30 or 90 days')
+    with pool.connection() as c:
+        if time_zone is not None:
+            try: c.execute(SET_LOCAL_TIME_ZONE,(time_zone,))
+            except errors.InvalidParameterValue:
+                raise HTTPException(422,'Unrecognized time zone') from None
+        if account_id and not c.execute('SELECT 1 FROM paylink.account_holders WHERE user_id=%s AND account_id=%s',(user['id'],account_id)).fetchone():
+            raise HTTPException(404,'Account not found')
+        bounds=c.execute("SELECT current_date AS today, current_date-(%s-1) AS start",(days,)).fetchone()
+        scoped='''WITH mine AS (SELECT account_id FROM paylink.account_holders WHERE user_id=%s),
+          scoped AS MATERIALIZED (
+            SELECT t.amount_cents,t.created_at::date AS day,
+              CASE WHEN t.source_account_id IN (SELECT account_id FROM mine) THEN 'sent' ELSE 'received' END AS direction,
+              CASE WHEN t.source_account_id IN (SELECT account_id FROM mine) THEN t.destination_account_id ELSE t.source_account_id END AS other
+            FROM paylink.transfers t
+            WHERE t.created_at>=current_date-(%s*2-1) AND t.created_at<current_date+interval '1 day'
+            AND ((t.source_account_id IN (SELECT account_id FROM mine)) <> (t.destination_account_id IN (SELECT account_id FROM mine)))
+            AND (%s::uuid IS NULL OR t.source_account_id=%s OR t.destination_account_id=%s)) '''
+        params=(user['id'],days,account_id,account_id,account_id)
+        rows=c.execute(scoped+'''SELECT day,count(*) AS transfer_count,
+          coalesce(sum(amount_cents) FILTER(WHERE direction='sent'),0)::bigint AS sent_cents,
+          coalesce(sum(amount_cents) FILTER(WHERE direction='received'),0)::bigint AS received_cents
+          FROM scoped GROUP BY day ORDER BY day''',params).fetchall()
+        people=c.execute(scoped+'''SELECT a.label AS name,s.direction,count(*) AS transfer_count,
+          sum(s.amount_cents)::bigint AS amount_cents FROM scoped s JOIN paylink.bank_accounts a ON a.id=s.other
+          WHERE s.day>=current_date-(%s-1) GROUP BY a.id,a.label,s.direction ORDER BY amount_cents DESC,a.id LIMIT 6''',params+(days,)).fetchall()
+    by_day={row['day']:row for row in rows}
+    daily=[by_day.get(bounds['start']+timedelta(days=i),{'day':bounds['start']+timedelta(days=i),'transfer_count':0,'sent_cents':0,'received_cents':0}) for i in range(days)]
+    def totals(items):
+        items=list(items)
+        return {key:sum(int(r[key]) for r in items) for key in ('transfer_count','sent_cents','received_cents')}
+    return {'period':{'start':bounds['start'],'end':bounds['today'],'days':days},'daily':daily,
+            'summary':totals(daily),'previous':totals(r for r in rows if r['day']<bounds['start']),
+            'counterparties':people}
+
 @app.get('/api/insights')
 def insights(user:User, time_zone: Annotated[str | None, Query(min_length=1, max_length=100)] = None):
     with pool.connection() as c:

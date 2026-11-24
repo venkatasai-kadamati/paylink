@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { PayBot } from "./paybot";
 import { Auth } from "./auth";
+import InsightDashboard from "./insights";
 import {
   AccountDetails,
   InvitationCenter,
@@ -97,6 +98,7 @@ const initials = (s: string) =>
     .toUpperCase();
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const r = await fetch("/api" + path, {
+    signal: AbortSignal.timeout(options.method === "POST" ? 60000 : 15000),
     ...options,
     headers: { "Content-Type": "application/json", ...options.headers },
   });
@@ -142,181 +144,6 @@ function localDay(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
-function InsightChart({
-  insights,
-  transfers,
-}: {
-  insights: Insights | null;
-  transfers: Transfer[];
-}) {
-  const [range, setRange] = useState<7 | 30>(7);
-  const weekly = insights?.weekly ?? [];
-  const older: DailyVolume[] = [];
-  const today = weekly.at(-1)?.day;
-  if (range === 30 && today) {
-    const buckets = new Map<string, DailyVolume>();
-    for (let offset = 29; offset >= 7; offset--) {
-      const value = new Date(today + "T12:00:00");
-      value.setDate(value.getDate() - offset);
-      const day = localDay(value),
-        bucket = { day, sent: 0, received: 0 };
-      buckets.set(day, bucket);
-      older.push(bucket);
-    }
-    for (const transfer of transfers) {
-      const day = buckets.get(localDay(new Date(transfer.created_at)));
-      if (!day) continue;
-      if (transfer.direction !== "received")
-        day.sent += Number(transfer.amount_cents);
-      if (transfer.direction !== "sent")
-        day.received += Number(transfer.amount_cents);
-    }
-  }
-  const days = [...older, ...weekly];
-  const oldest = transfers.at(-1);
-  const limited =
-    range === 30 &&
-    transfers.length === 200 &&
-    oldest &&
-    older.length > 0 &&
-    localDay(new Date(oldest.created_at)) >= older[0].day;
-  const covered = limited
-    ? days.filter(
-        (d) =>
-          d.day >= weekly[0].day ||
-          d.day > localDay(new Date(oldest.created_at)),
-      )
-    : days;
-  const active = covered.filter((d) => Number(d.sent) || Number(d.received));
-  const max = Math.max(
-    1,
-    ...covered.flatMap((d) => [Number(d.sent), Number(d.received)]),
-  );
-  const showChart = active.length > 1 && !limited;
-  return (
-    <section className="insights-grid">
-      <div className="panel chart-panel">
-        <div className="section-heading">
-          <h2>Daily transfer volume</h2>
-          <div className="chart-range" role="group" aria-label="Transfer range">
-            {([7, 30] as const).map((value) => (
-              <button
-                key={value}
-                aria-pressed={range === value}
-                onClick={() => setRange(value)}
-              >
-                {value} days
-              </button>
-            ))}
-          </div>
-        </div>
-        {insights && (
-          <>
-            {showChart ? (
-              <>
-                <div className="chart-legend">
-                  <span>
-                    <i className="in" />
-                    Received
-                  </span>
-                  <span>
-                    <i className="out" />
-                    Sent
-                  </span>
-                </div>
-                <div className="bar-chart" aria-hidden="true">
-                  {days.map((d, index) => (
-                    <div className="chart-day" key={d.day}>
-                      <div className="bars">
-                        {(["received", "sent"] as const).map((direction) => (
-                          <div
-                            key={direction}
-                            className={`bar ${direction}`}
-                            style={{
-                              height: `${(Number(d[direction]) / max) * 110}px`,
-                            }}
-                            title={`${direction === "received" ? "Received" : "Sent"} ${money(d[direction])}`}
-                          />
-                        ))}
-                      </div>
-                      <span>
-                        {range === 7
-                          ? new Date(d.day + "T12:00:00").toLocaleDateString(
-                              "en-US",
-                              { weekday: "short" },
-                            )
-                          : index % 7 === 3
-                            ? date(d.day + "T12:00:00")
-                            : ""}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="chart-empty" role="status">
-                <strong>
-                  {limited
-                    ? "Part of this range is unavailable"
-                    : active.length
-                      ? "Transfers on one day"
-                      : "No transfers in this period"}
-                </strong>
-                <p>
-                  {limited
-                    ? "The 30-day view uses your latest 200 transfers. Daily amounts show only complete days."
-                    : active.length
-                      ? `On ${date(active[0].day + "T12:00:00")}: ${money(active[0].received)} received · ${money(active[0].sent)} sent.`
-                      : range === 7
-                        ? "Try the 30-day view for older activity."
-                        : "Completed transfers will appear here."}
-                </p>
-              </div>
-            )}
-            <p className="chart-note">
-              Transfers between your accounts appear in both daily amounts and
-              do not count toward monthly sent or received totals.
-            </p>
-            <details className="chart-data">
-              <summary>View daily amounts</summary>
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">Date</th>
-                    <th scope="col">Received</th>
-                    <th scope="col">Sent</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {covered.map((d) => (
-                    <tr key={d.day}>
-                      <td>{date(d.day + "T12:00:00")}</td>
-                      <td>{money(d.received)}</td>
-                      <td>{money(d.sent)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </details>
-          </>
-        )}
-      </div>
-      <section className="monthly-flow">
-        <h2>This month</h2>
-        <dl>
-          <div>
-            <dt>Received</dt>
-            <dd>{money(Number(insights?.monthly.received_cents || 0))}</dd>
-          </div>
-          <div>
-            <dt>Sent</dt>
-            <dd>{money(Number(insights?.monthly.sent_cents || 0))}</dd>
-          </div>
-        </dl>
-      </section>
-    </section>
-  );
-}
 function Modal({
   title,
   eyebrow,
@@ -421,6 +248,7 @@ export default function Home() {
     [startDate, setStartDate] = useState(""),
     [endDate, setEndDate] = useState("");
   const sidebar = useRef<HTMLElement>(null);
+  const sessionVersion = useRef(0);
   const mobileToggle = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 1021px)");
@@ -472,36 +300,51 @@ export default function Home() {
     };
   }, [mobile]);
   const refresh = useCallback(async () => {
+    const version = sessionVersion.current;
+    const current = () => version === sessionVersion.current;
     setError("");
     setLoading(true);
     try {
-      const [a, t, invites, i] = await Promise.all([
-        api<Account[]>("/accounts"),
-        api<Transfer[]>("/transfers"),
-        api<Invitation[]>("/account-invitations"),
+      await Promise.all([
+        api<Account[]>("/accounts").then((a) => {
+          if (current()) {
+            setAccounts(a);
+            setLoading(false);
+          }
+        }),
+        api<Transfer[]>("/transfers").then((t) => {
+          if (current()) setTransfers(t);
+        }),
+        api<Invitation[]>("/account-invitations").then((i) => {
+          if (current()) setInvitations(i);
+        }),
         api<Insights>(
           "/insights?time_zone=" +
             encodeURIComponent(
               Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
             ),
-        ),
+        ).then((i) => {
+          if (current()) setInsights(i);
+        }),
       ]);
-      setInvitations(invites);
-      setAccounts(a);
-      setTransfers(t);
-      setInsights(i);
     } catch (e) {
-      setError((e as Error).message);
+      if (current())
+        setError(
+          (e as Error).name === "TimeoutError"
+            ? "The server is taking longer to respond. Please retry."
+            : (e as Error).message,
+        );
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   }, []);
   async function init() {
+    const version = sessionVersion.current;
     try {
       const u = await api<User>("/me");
-      setUser(u);
+      if (version === sessionVersion.current) setUser(u);
     } catch {
-      setUser(null);
+      if (version === sessionVersion.current) setUser(null);
     } finally {
       setReady(true);
     }
@@ -517,14 +360,17 @@ export default function Home() {
     const t = setTimeout(() => setToast(""), 5000);
     return () => clearTimeout(t);
   }, [toast]);
-  if (!ready)
+  if (!user)
     return (
-      <div className="loading-screen">
-        <Logo />
-        <Spinner />
-      </div>
+      <Auth
+        restoring={!ready}
+        onLogin={(u) => {
+          sessionVersion.current++;
+          setReady(true);
+          setUser({ ...u, email: "", phone: null });
+        }}
+      />
     );
-  if (!user) return <Auth onLogin={init} />;
   const [personalBalance, jointBalance] = accounts.reduce<[number, number]>(
     ([personal, joint], a) =>
       a.holder_count > 1
@@ -602,7 +448,6 @@ export default function Home() {
             { name: "Accounts", icon: Wallet },
             { name: "Balance", icon: Landmark },
             { name: "Insights", icon: ChartNoAxesColumnIncreasing },
-            { name: "Invitations", icon: Users },
           ].map(({ name, icon: Icon }) => (
             <button
               key={name}
@@ -612,7 +457,7 @@ export default function Home() {
             >
               <Icon size={19} />
               {name}
-              {name === "Invitations" &&
+              {name === "Accounts" &&
                 invitations.some(
                   (i) => i.status === "pending" && i.invitee_id === user.id,
                 ) && (
@@ -653,6 +498,7 @@ export default function Home() {
               aria-label="Sign out"
               onClick={async () => {
                 await api("/auth/logout", post({}));
+                sessionVersion.current++;
                 setMobile(false);
                 setUser(null);
                 setBot(false);
@@ -700,8 +546,8 @@ export default function Home() {
             </span>
             <button
               className="icon-button"
-              aria-label="View invitations"
-              onClick={() => nav("Invitations")}
+              aria-label="View joint account requests"
+              onClick={() => nav("Accounts")}
             >
               <Bell size={18} />
             </button>
@@ -1029,7 +875,7 @@ export default function Home() {
                   </div>
                 </section>
               )}
-              {tab === "Invitations" && (
+              {tab === "Accounts" && (
                 <InvitationCenter
                   items={invitations}
                   userId={user.id}
@@ -1042,7 +888,7 @@ export default function Home() {
                 ) && (
                   <button
                     className="invitation-banner"
-                    onClick={() => nav("Invitations")}
+                    onClick={() => nav("Accounts")}
                   >
                     <Users size={20} />
                     <span>
@@ -1266,7 +1112,18 @@ export default function Home() {
                 </section>
               )}
               {tab === "Insights" && (
-                <InsightChart insights={insights} transfers={transfers} />
+                <InsightDashboard
+                  accounts={accounts}
+                  hidden={hidden}
+                  onActivity={(day, account) => {
+                    nav("Activity");
+                    setStartDate(day);
+                    setEndDate(day);
+                    setAccountFilter(account);
+                    setFilter("All activity");
+                    setSearch("");
+                  }}
+                />
               )}
             </>
           )}
@@ -1289,7 +1146,7 @@ export default function Home() {
             setShare(false);
             refresh();
             setToast(
-              "Invitation sent. The new owner can accept it in Invitations.",
+              "Invitation sent. The new owner can review it in Accounts.",
             );
           }}
         />
@@ -1935,7 +1792,7 @@ function ShareModal({
         </label>
         <p className="form-footnote">
           Invitations expire in 7 days. You can cancel a pending invitation from
-          Invitations.
+          Accounts.
         </p>
         {error && (
           <div className="error" role="alert">
