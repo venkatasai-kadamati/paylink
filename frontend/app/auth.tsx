@@ -68,9 +68,6 @@ export function Auth({
           PayLink
         </a>
         <div className="story-copy">
-          <span className="story-kicker">
-            <span /> Your everyday banking workspace
-          </span>
           <h2>
             Every account.
             <br />
@@ -139,9 +136,6 @@ export function Auth({
         </div>
         <div className="auth-content">
           <div className="auth-title">
-            <span className="eyebrow">
-              {register ? "LET’S GET YOU SET UP" : "YOUR EVERYDAY MONEY SPACE"}
-            </span>
             <h1>{register ? "Create your account" : "Welcome back"}</h1>
             <p>
               {register

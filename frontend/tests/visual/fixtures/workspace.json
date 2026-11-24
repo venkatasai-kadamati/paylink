@@ -1,0 +1,172 @@
+{
+  "user": {
+    "id": "49d023c9-e43f-5e2b-b95b-d874f13e171e",
+    "username": "sai",
+    "email": "sai@paylink.test",
+    "phone": "+15550101001",
+    "full_name": "Sai Kadamati"
+  },
+  "accounts": [
+    {
+      "id": "310dd6b5-93f6-579c-bfe3-d59acd75b9dc",
+      "label": "Rainy day fund",
+      "account_type": "savings",
+      "balance_cents": 605000,
+      "active": true,
+      "last4": "9304",
+      "bank_name": "Northstar Credit Union",
+      "holder_count": 1
+    },
+    {
+      "id": "4e3f898d-17a3-5e31-9e77-ef818d082c31",
+      "label": "Everyday checking",
+      "account_type": "checking",
+      "balance_cents": 222500,
+      "active": true,
+      "last4": "4821",
+      "bank_name": "Meridian Bank",
+      "holder_count": 1
+    },
+    {
+      "id": "cd6ff479-28a6-521b-8a51-a66ae15006c2",
+      "label": "Shared expenses",
+      "account_type": "checking",
+      "balance_cents": 143000,
+      "active": true,
+      "last4": "7106",
+      "bank_name": "Pacific Trust",
+      "holder_count": 2
+    }
+  ],
+  "transfers": [
+    {
+      "id": "1db6b7e8-bad7-44f8-bb8f-f2bcf5d82608",
+      "amount_cents": 6500,
+      "memo": "Dinner, on me",
+      "created_at": "2026-11-22T22:23:33.035433-06:00",
+      "source_account_id": "546714d7-c877-5123-91f7-9f194c0a4a27",
+      "destination_account_id": "4e3f898d-17a3-5e31-9e77-ef818d082c31",
+      "direction": "received",
+      "source_label": "Maya checking",
+      "destination_label": "Everyday checking",
+      "counterparty": "Maya Chen"
+    },
+    {
+      "id": "fc92619c-c5f3-443b-ba4d-9fe4bc835708",
+      "amount_cents": 4200,
+      "memo": "Coffee & catch-up",
+      "created_at": "2026-11-21T22:23:33.037805-06:00",
+      "source_account_id": "4e3f898d-17a3-5e31-9e77-ef818d082c31",
+      "destination_account_id": "a4ddd79e-96d1-5e04-a0ad-426ec692ee42",
+      "direction": "sent",
+      "source_label": "Everyday checking",
+      "destination_label": "Everyday checking",
+      "counterparty": "Siddhardth"
+    },
+    {
+      "id": "cba0bf44-4bc4-472b-b678-76a1975a78a6",
+      "amount_cents": 12500,
+      "memo": "Weekend trip",
+      "created_at": "2026-11-20T22:23:33.039905-06:00",
+      "source_account_id": "3d5c9b72-eac7-59a6-9af9-6a28ceb57e32",
+      "destination_account_id": "4e3f898d-17a3-5e31-9e77-ef818d082c31",
+      "direction": "received",
+      "source_label": "Alex checking",
+      "destination_label": "Everyday checking",
+      "counterparty": "Alex Morgan"
+    },
+    {
+      "id": "dd96a52e-3bb5-4d43-84bc-309b7ae2f908",
+      "amount_cents": 18000,
+      "memo": "Shared groceries",
+      "created_at": "2026-11-19T22:23:33.041890-06:00",
+      "source_account_id": "4e3f898d-17a3-5e31-9e77-ef818d082c31",
+      "destination_account_id": "cd6ff479-28a6-521b-8a51-a66ae15006c2",
+      "direction": "internal",
+      "source_label": "Everyday checking",
+      "destination_label": "Shared expenses",
+      "counterparty": "Sai Kadamati"
+    },
+    {
+      "id": "05f7062c-d1a2-4fbc-b474-a882f66800ac",
+      "amount_cents": 2800,
+      "memo": "Lunch at the market",
+      "created_at": "2026-11-18T22:23:33.044012-06:00",
+      "source_account_id": "4e3f898d-17a3-5e31-9e77-ef818d082c31",
+      "destination_account_id": "546714d7-c877-5123-91f7-9f194c0a4a27",
+      "direction": "sent",
+      "source_label": "Everyday checking",
+      "destination_label": "Maya checking",
+      "counterparty": "Maya Chen"
+    },
+    {
+      "id": "8659eb38-8544-4acc-afb3-f2c1a1784085",
+      "amount_cents": 8500,
+      "memo": "Utilities split",
+      "created_at": "2026-11-17T22:23:33.046158-06:00",
+      "source_account_id": "a4ddd79e-96d1-5e04-a0ad-426ec692ee42",
+      "destination_account_id": "4e3f898d-17a3-5e31-9e77-ef818d082c31",
+      "direction": "received",
+      "source_label": "Everyday checking",
+      "destination_label": "Everyday checking",
+      "counterparty": "Siddhardth"
+    },
+    {
+      "id": "e09d5c07-4593-47e4-bc97-192d6fd95cb8",
+      "amount_cents": 25000,
+      "memo": "A little for later",
+      "created_at": "2026-11-16T22:23:33.047902-06:00",
+      "source_account_id": "4e3f898d-17a3-5e31-9e77-ef818d082c31",
+      "destination_account_id": "310dd6b5-93f6-579c-bfe3-d59acd75b9dc",
+      "direction": "internal",
+      "source_label": "Everyday checking",
+      "destination_label": "Rainy day fund",
+      "counterparty": "Sai Kadamati"
+    }
+  ],
+  "invitations": [],
+  "insights": {
+    "monthly": {
+      "transfer_count": 7,
+      "sent_cents": 7000,
+      "received_cents": 27500
+    },
+    "weekly": [
+      {
+        "day": "2026-11-18",
+        "sent": 2800,
+        "received": 0
+      },
+      {
+        "day": "2026-11-19",
+        "sent": 18000,
+        "received": 18000
+      },
+      {
+        "day": "2026-11-20",
+        "sent": 0,
+        "received": 12500
+      },
+      {
+        "day": "2026-11-21",
+        "sent": 4200,
+        "received": 0
+      },
+      {
+        "day": "2026-11-22",
+        "sent": 0,
+        "received": 6500
+      },
+      {
+        "day": "2026-11-23",
+        "sent": 0,
+        "received": 0
+      },
+      {
+        "day": "2026-11-24",
+        "sent": 0,
+        "received": 0
+      }
+    ]
+  }
+}

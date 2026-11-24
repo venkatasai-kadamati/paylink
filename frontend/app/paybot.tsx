@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { X } from 'lucide-react';
+import { EyeOff, X } from 'lucide-react';
 
 const suggestions = [
   'Show my balances', 'Recent transfers', 'Totals this month',
@@ -26,7 +26,9 @@ function Answer({display}: {display: AnswerDisplay}) {
   </>;
 }
 
-export function PayBot({open, onClose}:{open: boolean; onClose: () => void}) {
+export function PayBot({open, onClose, amountsHidden, onRevealAmounts}: {
+  open: boolean; onClose: () => void; amountsHidden: boolean; onRevealAmounts: () => void;
+}) {
   const panel = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -49,12 +51,16 @@ export function PayBot({open, onClose}:{open: boolean; onClose: () => void}) {
   }, [open]);
 
   useEffect(() => {
+    if (open && !amountsHidden) input.current?.focus();
+  }, [open, amountsHidden]);
+
+  useEffect(() => {
     if (log.current) log.current.scrollTop = log.current.scrollHeight;
   }, [open, messages, waiting, error]);
 
   async function ask(text: string) {
     text = text.trim();
-    if (!text || waiting) return;
+    if (!text || waiting || amountsHidden) return;
     setMessages(items => items.at(-1)?.speaker === 'You' && items.at(-1)?.text === text
       ? items : [...items, {speaker: 'You', text}]);
     setQuestion('');
@@ -86,6 +92,12 @@ export function PayBot({open, onClose}:{open: boolean; onClose: () => void}) {
     <header><div><h2 id="paybot-title">PayBot</h2><p>Ask about your accounts and transfers. PayBot can’t move money.</p></div>
       <button className="icon-button" aria-label="Close PayBot" onClick={onClose}><X size={18}/></button>
     </header>
+    {amountsHidden ? <div className="paybot-log paybot-privacy" role="status">
+      <EyeOff size={28} aria-hidden="true" />
+      <h3>Your amounts are hidden</h3>
+      <p>Show balances to view your conversation or ask about your accounts.</p>
+      <button className="button secondary" onClick={onRevealAmounts}>Show balances</button>
+    </div> : <>
     <div className="paybot-log" ref={log}>
       {!messages.length && <div className="paybot-prompts"><h3>Try a question</h3>
         {suggestions.map(prompt => <button key={prompt} onClick={() => {void ask(prompt); input.current?.focus();}}>{prompt}</button>)}
@@ -104,5 +116,6 @@ export function PayBot({open, onClose}:{open: boolean; onClose: () => void}) {
         onChange={event => setQuestion(event.target.value)}/>
         <button className="button primary" disabled={waiting || !question.trim()}>Ask</button></div>
     </form>
+    </>}
   </dialog>;
 }

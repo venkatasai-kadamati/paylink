@@ -13,6 +13,20 @@
   --error: #aa2e36;
   --radius: 12px;
   --focus: #155eef;
+  --chart-in: #208064;
+  --field-border: #7e8a9d;
+  --font-input: 16px;
+  --control-height: 48px;
+  --field-height: 50px;
+  --radius-control: 8px;
+  --radius-dialog: 16px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
 }
 * {
   box-sizing: border-box;
@@ -93,14 +107,8 @@ small {
   font-size: 14px;
 }
 .muted,
-.optional,
-.eyebrow {
+.optional {
   color: var(--muted);
-}
-.eyebrow {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.09em;
 }
 .mono {
   font-family: ui-monospace, monospace;
@@ -122,7 +130,7 @@ small {
   top: 12px;
   left: 12px;
   padding: 12px 20px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--accent);
   transform: translateY(-160%);
@@ -141,10 +149,10 @@ small {
   font-weight: 600;
 }
 .button {
-  min-height: 48px;
+  min-height: var(--control-height);
   padding: 11px 19px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   font-size: 15px;
   line-height: 1.4;
 }
@@ -186,7 +194,7 @@ small {
 .icon-button {
   width: 44px;
   height: 44px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 0;
   flex-shrink: 0;
 }
@@ -227,7 +235,7 @@ small {
   margin: 16px 0;
   padding: 13px 16px;
   border: 1px solid #e6b8bb;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--error);
   background: #fff1f1;
 }
@@ -251,13 +259,13 @@ input,
 select {
   min-width: 0;
   width: 100%;
-  min-height: 50px;
+  min-height: var(--field-height);
   padding: 12px 14px;
-  border: 1px solid #aebacd;
-  border-radius: 8px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--ink);
-  font-size: 16px;
+  font-size: var(--font-input);
   font-weight: 400;
   line-height: 1.5;
 }
@@ -366,6 +374,13 @@ select:focus {
 .modal-backdrop {
   position: fixed;
   inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  color: inherit;
   z-index: 30;
   display: grid;
   place-items: center;
@@ -373,6 +388,8 @@ select:focus {
   background: #12234080;
   backdrop-filter: blur(3px);
 }
+.modal-backdrop:not([open]) { display: none; }
+.modal-backdrop::backdrop { background: transparent; }
 .modal {
   position: relative;
   width: min(100%, 560px);
@@ -578,8 +595,8 @@ fieldset.pending-fields {
   display: flex;
   align-items: center;
   gap: 12px;
-  border: 1px solid #aebacd;
-  border-radius: 8px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
   background: var(--surface);
   padding: 4px 16px;
   margin-top: 8px;
@@ -661,7 +678,7 @@ fieldset.pending-fields {
   gap: 10px;
   padding: 15px;
   border: 1px solid #cddbf7;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--tint);
   font-size: 14px;
   color: #31507c;
@@ -688,7 +705,7 @@ fieldset.pending-fields {
   margin-top: 20px;
   padding: 16px;
   background: var(--paper);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   font-size: 14px;
 }
 .receipt-mini span {
@@ -776,7 +793,7 @@ fieldset.pending-fields {
   padding: 10px 14px;
   text-align: left;
   border: 1px solid #c9d5e8;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--surface);
   font-size: 15px;
 }
@@ -898,3 +915,8 @@ fieldset.pending-fields {
     animation: none !important;
   }
 }
+
+::selection { background: #cbdcff; color: var(--ink); }
+input, select, textarea { caret-color: var(--accent); }
+.button.primary:active:not(:disabled) { background: #123781; }
+.button.secondary:active:not(:disabled) { background: #dce8ff; }

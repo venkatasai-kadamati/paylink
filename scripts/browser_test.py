@@ -151,6 +151,39 @@ try:
     with page.expect_download() as download:page.get_by_role('link',name='Export CSV').click()
     text=Path(download.value.path()).read_text();assert 'Browser validation' in text
     record('Reload persistence, activity search, details, and real CSV download')
+    # Real recipient return: this caught a focus escape hidden by click-only tests.
+    recipient_context=browser.new_context(viewport={'width':1440,'height':1000},timezone_id=browser_zone)
+    recipient_page=recipient_context.new_page()
+    recipient_page.goto('http://localhost:3000')
+    recipient_page.get_by_role('button',name='Sign in as Siddhardth').click()
+    expect(recipient_page.get_by_role('heading',name='Hello, Siddhardth.')).to_be_visible()
+    recipient_page.get_by_role('button',name='Activity',exact=True).click()
+    recipient_page.get_by_role('textbox',name='Search activity').fill(str(row[0]))
+    recipient_page.locator('tbody .transaction-name').first.click()
+    receipt=recipient_page.get_by_role('dialog',name='Transfer details')
+    assert receipt.evaluate("el=>el.matches(':modal')")
+    receipt.get_by_role('button',name='Return this payment').click()
+    expect(receipt.get_by_role('textbox',name='Reason',exact=True)).to_be_focused()
+    receipt.get_by_role('textbox',name='Reason',exact=True).fill('Keyboard return regression')
+    receipt.get_by_role('button',name='Confirm return').click()
+    expect(receipt.get_by_text('Returned transfer',exact=True)).to_be_visible()
+    compensation=db('SELECT reversing_transfer_id FROM paylink.transfer_reversals WHERE original_transfer_id=%s',(row[0],))[0][0]
+    transfer_ids.append(compensation)
+    assert db('SELECT balance_cents FROM paylink.bank_accounts WHERE id=%s',(source[0],))[0][0]==source[1]
+    assert db('SELECT balance_cents FROM paylink.bank_accounts WHERE id=%s',(recipient[0],))[0][0]==recipient[1]
+    expect(receipt.get_by_role('heading',name='Transfer details')).to_be_focused()
+    for keypress in ['Tab']*5+['Shift+Tab']*5:
+        recipient_page.keyboard.press(keypress)
+        assert receipt.evaluate('el=>el.contains(document.activeElement)'),keypress
+    recipient_page.keyboard.press('Escape')
+    expect(receipt).to_have_count(0)
+    recipient_context.close()
+    record('Recipient return restores balances; completion focus, Tab/Shift+Tab and Escape stay correct')
+    # The other browser changed balances; refresh this non-realtime sender view
+    # before comparing its later Balance UI with the now-returned DB fixture.
+    page.reload()
+    expect(page.get_by_role('heading',name='Hello, Sai.')).to_be_visible()
+    page.get_by_role('button',name='Activity',exact=True).click()
     page.get_by_role('textbox',name='Search activity').fill('')
     expect(page.locator('tbody tr')).not_to_have_count(0)
     page.screenshot(path=str(ARTIFACTS/'sai-history.png'),full_page=True)
@@ -164,7 +197,8 @@ try:
     sent_label=f'${(sent_before+1234)/100:,.2f}'
     expect(page.locator('.chart-data tr').filter(has=page.get_by_text(local_date_label,exact=True)).locator('td').last).to_have_text(sent_label)
     expect(page.locator('.cashflow-day')).to_have_count(7)
-    expect(page.locator('.cashflow-day').filter(has=page.locator('.cashflow-out')).first).to_be_visible()
+    page.locator('.cashflow-explorer select').select_option(local_day.isoformat())
+    expect(page.locator('.cashflow-selection')).to_contain_text(sent_label+' out')
     assert any(float(bar.evaluate('el=>el.style.height.replace("px","")'))>2 for bar in page.locator('.cashflow-out').all())
     record('Activity, Insights chart and daily amounts use the same Honolulu date at a Chicago day boundary')
     page.screenshot(path=str(ARTIFACTS/'sai-insights.png'),full_page=True)
@@ -312,6 +346,7 @@ finally:
             c.execute('DELETE FROM paylink.bank_accounts WHERE id=%s',(starter_id,))
         c.execute('DELETE FROM paylink.users WHERE username=%s',(username,))
     for id in transfer_ids:
+        c.execute('DELETE FROM paylink.transfer_reversals WHERE original_transfer_id=%s OR reversing_transfer_id=%s',(id,id))
         c.execute('DELETE FROM paylink.transfer_postings WHERE transfer_id=%s',(id,))
         r=c.execute('DELETE FROM paylink.transfers WHERE id=%s RETURNING source_account_id,destination_account_id,amount_cents',(id,)).fetchone()
         if r:

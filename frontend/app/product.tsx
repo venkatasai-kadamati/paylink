@@ -239,11 +239,13 @@ export function TransferReceipt({
     [error, setError] = useState(""),
     [copied, setCopied] = useState(false),
     [returning, setReturning] = useState(false),
+    [returnCompleted, setReturnCompleted] = useState(false),
     [reason, setReason] = useState(""),
     [busy, setBusy] = useState(false),
     [version, setVersion] = useState(0);
   const key = useRef("");
   const submitting = useRef(false);
+  const copyButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     let cancelled = false;
     setError("");
@@ -262,7 +264,7 @@ export function TransferReceipt({
   const canReturn =
     !!received &&
     accounts.some((a) => a.id === received.account_id && a.active) &&
-    !ledger?.reversal;
+    !ledger?.reversal && !returnCompleted;
   async function reverse() {
     if (submitting.current) return;
     submitting.current = true;
@@ -275,6 +277,7 @@ export function TransferReceipt({
         reason,
         idempotency_key: key.current,
       });
+      setReturnCompleted(true);
       setReturning(false);
       setVersion((v) => v + 1);
       onUpdated();
@@ -292,8 +295,8 @@ export function TransferReceipt({
         <span className="receipt-seal">
           <Check size={26} />
         </span>
-        <span className="muted">
-          {ledger?.reversal ? "Returned transfer" : "Completed transfer"}
+        <span className="muted" role="status">
+          {ledger?.reversal || returnCompleted ? "Returned transfer" : "Completed transfer"}
         </span>
         <div className="receipt-amount">
           {hidden ? "••••••" : money(transfer.amount_cents)}
@@ -380,6 +383,7 @@ export function TransferReceipt({
         </div>
       )}
       <button
+        ref={copyButton}
         className="button secondary full"
         onClick={async () => {
           try {
@@ -423,6 +427,8 @@ export function TransferReceipt({
           <label>
             Reason
             <input
+              autoFocus
+              data-autofocus
               value={reason}
               disabled={busy}
               onChange={(e) => {
@@ -440,7 +446,10 @@ export function TransferReceipt({
               type="button"
               className="button secondary"
               disabled={busy}
-              onClick={() => setReturning(false)}
+              onClick={() => {
+                setReturning(false);
+                copyButton.current?.focus();
+              }}
             >
               Keep payment
             </button>

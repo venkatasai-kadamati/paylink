@@ -169,7 +169,6 @@ function localDay(value: Date) {
 
 function Modal({
   title,
-  eyebrow,
   onClose,
   children,
   className = "",
@@ -177,76 +176,68 @@ function Modal({
   focusKey,
 }: {
   title: string;
-  eyebrow?: string;
   onClose: () => void;
   children: React.ReactNode;
   className?: string;
   busy?: boolean;
   focusKey?: number;
 }) {
+  const dialog = useRef<HTMLDialogElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     const before = document.activeElement as HTMLElement;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const surface = dialog.current;
+    surface?.showModal();
     return () => {
+      surface?.close();
       document.body.style.overflow = prev;
       before?.focus();
     };
   }, []);
   useEffect(() => {
-    const target = ref.current?.querySelector<HTMLElement>("[data-autofocus]");
+    const target = !busy && ref.current?.querySelector<HTMLElement>(
+      "[data-autofocus]:not(:disabled)",
+    );
     (target || heading.current)?.focus();
     ref.current?.scrollTo({ top: 0 });
-  }, [title, focusKey]);
+  }, [title, focusKey, busy]);
   return (
-    <div
+    <dialog
+      ref={dialog}
       className="modal-backdrop"
+      aria-label={title}
+      aria-modal="true"
+      onCancel={(e) => {
+        e.preventDefault();
+        if (!busy) onClose();
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Tab") return;
+        const stops = Array.from(
+          ref.current?.querySelectorAll<HTMLElement>(
+            "button,input,select,textarea,a[href],summary,[tabindex]",
+          ) || [],
+        ).filter((node) => node.tabIndex >= 0 && !node.matches(":disabled") && node.getClientRects().length > 0);
+        const first = stops[0], last = stops[stops.length - 1];
+        if (!first) {
+          e.preventDefault();
+          heading.current?.focus();
+        } else if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }}
       onClick={(e) => {
         if (!busy && e.target === e.currentTarget) onClose();
       }}
     >
-      <div
-        className={"modal " + className}
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        tabIndex={-1}
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && !busy) onClose();
-          if (e.key === "Tab") {
-            const els = ref.current?.querySelectorAll<HTMLElement>(
-              "button:not(:disabled),input:not(:disabled),select:not(:disabled),a[href],textarea:not(:disabled)",
-            );
-            if (!els?.length) {
-              e.preventDefault();
-              ref.current?.focus();
-              return;
-            }
-            const first = els[0],
-              last = els[els.length - 1];
-            if (
-              e.shiftKey &&
-              (document.activeElement === first ||
-                document.activeElement === ref.current ||
-                document.activeElement === heading.current)
-            ) {
-              e.preventDefault();
-              last.focus();
-            } else if (
-              !e.shiftKey &&
-              (document.activeElement === last ||
-                document.activeElement === heading.current ||
-                document.activeElement === ref.current)
-            ) {
-              e.preventDefault();
-              first.focus();
-            }
-          }
-        }}
-      >
+      <div className={"modal " + className} ref={ref}>
         <button
           className="icon-button close"
           aria-label="Close dialog"
@@ -255,13 +246,12 @@ function Modal({
         >
           <X size={20} />
         </button>
-        {eyebrow && <div className="eyebrow">{eyebrow}</div>}
         <h2 ref={heading} tabIndex={-1}>
           {title}
         </h2>
         {children}
       </div>
-    </div>
+    </dialog>
   );
 }
 
@@ -493,7 +483,6 @@ export default function Home({ hasSession }: { hasSession: boolean }) {
           </button>
         </header>
         <section className="session-content">
-          <span className="eyebrow">YOUR EVERYDAY MONEY SPACE</span>
           <h1>Opening your workspace</h1>
           {sessionError ? (
             <div className="error" role="alert">
@@ -831,17 +820,14 @@ export default function Home({ hasSession }: { hasSession: boolean }) {
                             key={d.day}
                             style={{
                               height:
-                                Math.max(
-                                  3,
-                                  (Number(d.received) /
+                                (hidden ? 0 : (Number(d.received) /
                                     Math.max(
                                       1,
                                       ...(insights?.weekly ?? []).map((x) =>
                                         Number(x.received),
                                       ),
                                     )) *
-                                    27,
-                                ) + "px",
+                                    27) + "px",
                             }}
                           />
                         ))}
@@ -989,12 +975,14 @@ export default function Home({ hasSession }: { hasSession: boolean }) {
                             ••{a.last4}
                           </small>
                         </span>
-                        <span className="account-ownership">
+                        {tab !== "Overview" && <span className="account-ownership">
                           {ownership(a.holder_count)}
                           {!a.active && " / Inactive"}
-                        </span>
+                        </span>}
                         <span className="account-balance">
-                          <small>Available balance</small>
+                          <small>{tab === "Overview"
+                            ? `${ownership(a.holder_count)} balance${a.active ? "" : " · Inactive"}`
+                            : "Available balance"}</small>
                           <strong>
                             {hidden ? "••••••" : money(a.balance_cents)}
                           </strong>
@@ -1075,7 +1063,7 @@ export default function Home({ hasSession }: { hasSession: boolean }) {
                       </a>
                     )}
                   </div>
-                  <div className="activity-tools">
+                  {tab === "Activity" && <div className="activity-tools">
                     <div className="filters">
                       {[
                         "All activity",
@@ -1097,7 +1085,7 @@ export default function Home({ hasSession }: { hasSession: boolean }) {
                       <Search size={16} />
                       <input
                         aria-label="Search activity"
-                        placeholder="Search name, note or reference"
+                        placeholder="Search activity"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                       />
@@ -1111,13 +1099,15 @@ export default function Home({ hasSession }: { hasSession: boolean }) {
                         </button>
                       )}
                     </div>
-                  </div>
+                  </div>}
                   {tab === "Activity" && (
-                    <div className="activity-advanced">
-                      <span>
-                        <SlidersHorizontal size={15} />
-                        Refine activity
-                      </span>
+                    <details className="activity-filter-disclosure">
+                      <summary><SlidersHorizontal size={16} aria-hidden="true" /> Filters
+                        {[accountFilter, startDate, endDate].filter(Boolean).length > 0 &&
+                          <span> · {[accountFilter, startDate, endDate].filter(Boolean).length} applied</span>}
+                        <ChevronRight className="filter-chevron" size={16} aria-hidden="true" />
+                      </summary>
+                      <div className="activity-advanced">
                       <label>
                         <span className="sr-only">Filter by account</span>
                         <select
@@ -1171,7 +1161,8 @@ export default function Home({ hasSession }: { hasSession: boolean }) {
                           Reset filters
                         </button>
                       )}
-                    </div>
+                      </div>
+                    </details>
                   )}
                   <div className="table-scroll">
                     <table>
@@ -1184,7 +1175,7 @@ export default function Home({ hasSession }: { hasSession: boolean }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {visible
+                        {(tab === "Overview" ? transfers : visible)
                           .slice(0, tab === "Overview" ? 5 : 200)
                           .map((t) => (
                             <tr key={t.id} onClick={() => setDetail(t)}>
@@ -1379,7 +1370,8 @@ export default function Home({ hasSession }: { hasSession: boolean }) {
           />
         </Modal>
       )}
-      <PayBot open={bot} onClose={() => setBot(false)} />
+      <PayBot open={bot} onClose={() => setBot(false)} amountsHidden={hidden}
+        onRevealAmounts={() => setHidden(false)} />
       {toast && (
         <div className="toast" role="status">
           <Check size={17} />
@@ -1993,7 +1985,6 @@ function LinkModal({
   return (
     <Modal
       title="Open an account"
-      eyebrow="LINK A SIMULATED ACCOUNT"
       onClose={onClose}
       busy={busy}
     >
@@ -2098,7 +2089,6 @@ function ShareModal({
   return (
     <Modal
       title="Invite a joint owner"
-      eyebrow="SIMULATED JOINT OWNERSHIP"
       onClose={onClose}
       busy={busy}
     >

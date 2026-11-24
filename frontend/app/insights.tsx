@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { CashFlowChart, type CashFlowSeries } from "./cashflow-chart";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -53,7 +54,7 @@ export default function InsightDashboard({
     [error, setError] = useState(""),
     [retry, setRetry] = useState(0),
     [selected, setSelected] = useState<string | null>(null),
-    [view, setView] = useState("both");
+    [view, setView] = useState<CashFlowSeries>("both");
   useEffect(() => {
     const controller = new AbortController();
     let disposed = false;
@@ -112,10 +113,6 @@ export default function InsightDashboard({
   const s = report?.summary,
     p = report?.previous,
     active = report?.daily.filter((d) => d.transfer_count).length || 0;
-  const max = Math.max(
-    1,
-    ...(report?.daily.flatMap((d) => [d.sent_cents, d.received_cents]) || []),
-  );
   const picked = report?.daily.find((d) => d.day === selected);
   const busiest = report?.daily.reduce<Day | null>(
     (best, d) =>
@@ -134,7 +131,7 @@ export default function InsightDashboard({
   return (
     <div className="insight-workspace">
       <section className="insight-toolbar" aria-label="Insight filters">
-        <div className="chart-range" aria-label="Date range">
+        <div className="chart-range" role="group" aria-label="Date range">
           {[7, 30, 90].map((n) => (
             <button
               key={n}
@@ -233,12 +230,12 @@ export default function InsightDashboard({
                 <h2>Cash flow over time</h2>
                 <p className="muted">Select a day to explore the details.</p>
               </div>
-              <div className="chart-range" aria-label="Chart series">
-                {[
+              <div className="chart-range" role="group" aria-label="Chart series">
+                {([
                   ["both", "Both"],
                   ["received", "Money in"],
                   ["sent", "Money out"],
-                ].map(([v, label]) => (
+                ] as const).map(([v, label]) => (
                   <button
                     key={v}
                     aria-pressed={view === v}
@@ -249,76 +246,8 @@ export default function InsightDashboard({
                 ))}
               </div>
             </div>
-            <div className="cashflow-plot">
-              <div className="cashflow-scale">
-                <span>{amount(max)}</span>
-                <span>{amount(0)}</span>
-              </div>
-              <div
-                className="cashflow-chart"
-                aria-label="Daily cash flow chart"
-              >
-                {report.daily.map((d, i) => (
-                  <button
-                    key={d.day}
-                    className={
-                      "cashflow-day " + (selected === d.day ? "selected" : "")
-                    }
-                    aria-pressed={selected === d.day}
-                    aria-label={`${dayLabel(d.day)}: ${hidden ? "amounts hidden" : `${usd(d.received_cents)} received, ${usd(d.sent_cents)} sent`}`}
-                    onClick={() => setSelected(d.day)}
-                  >
-                    <span className="cashflow-pair">
-                      {view !== "sent" && (
-                        <i
-                          className="cashflow-in"
-                          style={{
-                            height: hidden
-                              ? "2px"
-                              : `${Math.max(2, (d.received_cents / max) * 180)}px`,
-                          }}
-                        />
-                      )}
-                      {view !== "received" && (
-                        <i
-                          className="cashflow-out"
-                          style={{
-                            height: hidden
-                              ? "2px"
-                              : `${Math.max(2, (d.sent_cents / max) * 180)}px`,
-                          }}
-                        />
-                      )}
-                    </span>
-                    <small>
-                      {days === 7
-                        ? new Date(d.day + "T12:00:00").toLocaleDateString(
-                            "en-US",
-                            { weekday: "short" },
-                          )
-                        : i === 0 ||
-                            i === days - 1 ||
-                            i % Math.ceil(days / 5) === 0
-                          ? new Date(d.day + "T12:00:00").getDate()
-                          : ""}
-                    </small>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="cashflow-key">
-              <span>
-                <i />
-                Money in
-              </span>
-              <span>
-                <i />
-                Money out
-              </span>
-              <span>
-                {dayLabel(report.period.start)} – {dayLabel(report.period.end)}
-              </span>
-            </div>
+            <CashFlowChart daily={report.daily} view={view} hidden={hidden}
+              selected={selected} onSelect={setSelected} />
             {picked && (
               <div className="cashflow-selection" role="status">
                 <strong>{dayLabel(picked.day)}</strong>
@@ -380,11 +309,12 @@ export default function InsightDashboard({
               </p>
               <div
                 className="flow-ratio"
-                aria-label="Incoming and outgoing share"
+                aria-hidden="true"
+                style={{ background: hidden || !s!.transfer_count ? "var(--line)" : "var(--accent)" }}
               >
                 <i
                   style={{
-                    width: `${hidden ? 50 : s!.received_cents + s!.sent_cents ? (s!.received_cents / (s!.received_cents + s!.sent_cents)) * 100 : 50}%`,
+                    width: `${hidden ? 0 : s!.received_cents + s!.sent_cents ? (s!.received_cents / (s!.received_cents + s!.sent_cents)) * 100 : 0}%`,
                   }}
                 />
               </div>
