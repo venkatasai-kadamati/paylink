@@ -384,7 +384,7 @@ export default function InsightDashboard({
               >
                 <i
                   style={{
-                    width: `${s!.received_cents + s!.sent_cents ? (s!.received_cents / (s!.received_cents + s!.sent_cents)) * 100 : 50}%`,
+                    width: `${hidden ? 50 : s!.received_cents + s!.sent_cents ? (s!.received_cents / (s!.received_cents + s!.sent_cents)) * 100 : 50}%`,
                   }}
                 />
               </div>
