@@ -2057,6 +2057,7 @@ tbody tr:last-child td {
     gap: 4px;
   }
   .summary-grid {
+    grid-template-columns: 1fr;
     gap: 14px;
   }
   .balance-panel,
@@ -2070,6 +2071,15 @@ tbody tr:last-child td {
   }
   .metric-card > strong {
     font-size: 27px;
+    white-space: nowrap;
+  }
+  .flow-stat strong {
+    font-size: 20px;
+    white-space: nowrap;
+  }
+  .flow-stat .flow-bars,
+  .flow-stat .flow-period {
+    display: none;
   }
   .panel {
     padding: 20px;
