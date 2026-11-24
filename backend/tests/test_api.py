@@ -1,6 +1,34 @@
 from fastapi.testclient import TestClient
 from backend.app.main import app
 
+def test_workspace_bootstrap_matches_scoped_endpoints_and_validates_session(monkeypatch):
+    import backend.app.main as main
+    import json
+    main.attempts.clear()
+    monkeypatch.setenv('PUBLIC_DEMO_ENABLED', 'true')
+    with TestClient(app) as client:
+        assert client.get('/api/workspace').status_code == 401
+        for username in ('sai', 'siddhardth'):
+            assert client.post('/api/auth/demo', json={'username': username}).status_code == 200
+            response = client.get('/api/workspace', params={'time_zone': 'Pacific/Honolulu'})
+            assert response.status_code == 200
+            assert response.headers['cache-control'] == 'no-store'
+            data = response.json()
+            assert data['user'] == client.get('/api/me').json()
+            assert data['user']['username'] == username
+            assert data['accounts'] == client.get('/api/accounts').json()
+            assert data['transfers'] == client.get('/api/transfers').json()
+            assert data['invitations'] == client.get('/api/account-invitations').json()
+            assert data['insights'] == client.get('/api/insights', params={'time_zone': 'Pacific/Honolulu'}).json()
+            assert 'password_hash' not in json.dumps(data)
+            assert 'account_number' not in json.dumps(data)
+        assert client.get('/api/workspace', params={'time_zone': 'Unknown/Zone'}).status_code == 422
+        client.post('/api/auth/logout')
+        assert client.get('/api/workspace').status_code == 401
+        client.cookies.set('paylink_session', 'invalid-token')
+        assert client.get('/api/workspace').status_code == 401
+    main.attempts.clear()
+
 def test_quick_demo_signin_is_explicit_and_limited_to_two_profiles(monkeypatch):
     import backend.app.main as main
     main.attempts.clear()

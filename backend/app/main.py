@@ -488,3 +488,15 @@ def insights(user:User, time_zone: Annotated[str | None, Query(min_length=1, max
           FROM days LEFT JOIN relevant t ON t.created_at>=days.day AND t.created_at<days.day+interval '1 day'
           GROUP BY days.day ORDER BY days.day''',(user['id'],)).fetchall()
     return {'monthly':monthly,'weekly':weekly}
+
+@app.get('/api/workspace')
+def workspace(user: User, time_zone: Annotated[str | None, Query(min_length=1, max_length=100)] = None):
+    # Bootstrap once, rather than /me followed by four authenticated requests.
+    # Reuse the existing user-scoped queries; no client balance/identity cache.
+    return {
+        'user': user,
+        'accounts': accounts(user),
+        'transfers': history(user),
+        'invitations': invitations(user),
+        'insights': insights(user, time_zone),
+    }

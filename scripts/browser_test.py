@@ -30,9 +30,46 @@ try:
     browser_zone='Pacific/Honolulu'
     context=browser.new_context(viewport={'width':1440,'height':1100},timezone_id=browser_zone)
     page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
+    startup_requests=[]
+    page.on('request',lambda request:startup_requests.append(urlparse(request.url).path) if '/api/' in request.url else None)
     page.goto('http://localhost:3000');page.get_by_role('button',name='Sign in as Sai').click()
     expect(page.get_by_role('heading',name='Hello, Sai.')).to_be_visible()
     expect(page.get_by_text('Everyday checking',exact=True)).to_be_visible()
+    assert startup_requests.count('/api/workspace')==1,startup_requests
+    assert not set(startup_requests)&{'/api/me','/api/health','/api/accounts','/api/transfers','/api/account-invitations','/api/insights'},startup_requests
+    page.add_init_script('''window.authFlashed=false;
+      new MutationObserver(()=>{if(document.querySelector('.auth-layout'))window.authFlashed=true;})
+        .observe(document,{childList:true,subtree:true});''')
+    page.reload()
+    expect(page.get_by_role('heading',name='Hello, Sai.')).to_be_visible()
+    expect(page.get_by_text('Everyday checking',exact=True)).to_be_visible()
+    assert page.evaluate('window.authFlashed') is False
+    record('One authenticated bootstrap; returning sessions never paint signed-out authentication')
+    cookie_before=next(c['value'] for c in context.cookies() if c['name']=='paylink_session')
+    page.route('**/api/workspace?*',lambda route:route.fulfill(status=503,json={'detail':'Reconnect test: temporarily unavailable'}))
+    page.reload()
+    expect(page.get_by_role('alert')).to_contain_text('Reconnect test')
+    expect(page.get_by_role('heading',name='Opening your workspace')).to_be_visible()
+    expect(page.get_by_role('heading',name='Welcome back')).to_have_count(0)
+    assert next(c['value'] for c in context.cookies() if c['name']=='paylink_session')==cookie_before
+    page.unroute('**/api/workspace?*')
+    page.get_by_role('button',name='Try again',exact=True).click()
+    expect(page.get_by_role('heading',name='Hello, Sai.')).to_be_visible()
+    expect(page.get_by_text('Everyday checking',exact=True)).to_be_visible()
+    record('Transient bootstrap failure preserves the session and recovers through Retry')
+    assert page.request.post('http://localhost:3000/api/auth/logout',headers={'Origin':'https://evil.example'}).status==403
+    assert page.request.post('http://localhost:3000/api/auth/logout',headers={'sec-fetch-site':'cross-site'}).status==403
+    assert page.request.get('http://localhost:3000/api/auth/logout').status==405
+    assert next(c['value'] for c in context.cookies() if c['name']=='paylink_session')==cookie_before
+    record('Same-origin logout rejects cross-site requests and GET without clearing the session')
+    expired=browser.new_context()
+    expired.add_cookies([{'name':'paylink_session','value':'invalid-token','domain':'localhost','path':'/','httpOnly':True}])
+    expired_page=expired.new_page()
+    expired_page.goto('http://localhost:3000')
+    expect(expired_page.get_by_role('heading',name='Welcome back')).to_be_visible()
+    expect(expired_page.locator('.app-shell')).to_have_count(0)
+    expired.close()
+    record('Invalid cookie reaches real sign-in without exposing a workspace')
     source=db("SELECT a.id,a.balance_cents FROM paylink.bank_accounts a JOIN paylink.account_holders h ON h.account_id=a.id JOIN paylink.users u ON u.id=h.user_id WHERE u.username='sai' AND a.label='Everyday checking'")[0]
     recipient=db("SELECT a.id,a.balance_cents FROM paylink.bank_accounts a JOIN paylink.account_holders h ON h.account_id=a.id JOIN paylink.users u ON u.id=h.user_id WHERE u.username='siddhardth' AND a.label='Everyday checking'")[0]
     timestamp=(datetime.now(timezone.utc)-timedelta(days=2)).replace(hour=7,minute=30,second=0,microsecond=0)

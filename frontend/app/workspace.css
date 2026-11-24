@@ -1,3 +1,37 @@
+.session-layout {
+  min-height: 100dvh;
+  padding: clamp(20px, 5vw, 64px);
+  background: var(--paper);
+}
+.session-layout > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.session-content {
+  max-width: 1060px;
+  margin: 64px auto;
+}
+.session-content h1 {
+  font-size: clamp(26px, 4vw, 36px);
+  margin: 12px 0;
+}
+.session-content > p {
+  color: var(--muted);
+}
+.session-skeleton {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 20px;
+  margin-top: 32px;
+}
+.session-skeleton > div {
+  height: 180px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
 /* PayLink: a single, shared banking workspace system.
    Reference patterns: Mercury/Mobbin (navigation + structured activity),
    Nexbank/Dribbble (balance hierarchy), PrimeBank/Dribbble (split authentication).

@@ -1,5 +1,5 @@
 "use client";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import {
   ArrowLeftRight,
   ArrowRight,
@@ -15,21 +15,13 @@ import {
 
 export function Auth({
   onLogin,
-  restoring = false,
 }: {
   onLogin: (user: { id: string; username: string; full_name: string }) => void;
-  restoring?: boolean;
 }) {
   const [register, setRegister] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [show, setShow] = useState(false);
-  useEffect(() => {
-    const controller = new AbortController();
-    // Wake the preview API without blocking the sign-in interface.
-    fetch("/api/health", { signal: controller.signal }).catch(() => {});
-    return () => controller.abort();
-  }, []);
   async function request(path: string, data: unknown) {
     setBusy(true);
     setError("");
@@ -68,11 +60,6 @@ export function Auth({
   }
   return (
     <main className="auth-layout">
-      {restoring && (
-        <div className="session-notice" role="status">
-          Checking your existing session. You can still sign in below.
-        </div>
-      )}
       <section className="auth-story" aria-label="About PayLink">
         <a className="logo" href="/">
           <span className="logo-mark">
