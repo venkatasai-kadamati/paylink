@@ -1,16 +1,16 @@
 # PayLink — CS 5600 Advanced Database Systems Presentation Script
 
 **Speakers:** Venkata Sai Kadamati (**Sai**) and **Siddhardth**  
-**Deck:** `docs/adb-final-presentation.pptx` (17 slides, built on the shared `EcoCraft_Cloud_Presentation.pptx` template)  
-**Companion Report:** `docs/adb-final-report.pdf` (built in the exact `EcoCraft_AWS_Deployment_Report.docx` style)  
+**Deck:** `docs/adb-final-presentation.pptx` (17 slides)  
+**Companion Report:** `docs/adb-final-report.pdf` (9 pages)  
 **Live App:** `https://paylink-radiant690s-projects.vercel.app/`  
-**Estimated Time:** ~14–16 minutes + Q&A *(no presentation time limit was specified in the supplied guide `info.md`; shorten or expand the live demo on Slide 15 to fit the room)*
+**Estimated Time:** ~14–16 minutes + Q&A *(shorten or expand the live demo on Slide 15 to fit the room)*
 
 ---
 
 ## How the Talk Is Split
 
-Sai takes the heavy database-engineering halves (overview & MVP evolution, 8-table schema & ER diagram, constraints & triggers, normalization, transactions & concurrency, core SQL & BRIN indexing, `EXPLAIN ANALYZE` benchmarks, DB narration during the live demo, and Q&A lead). Siddhardth handles live features, application stack, dataset provenance, end-to-end UI→API→DB request flow, driving the live demo, and the first half of challenges.
+Sai leads the core database-engineering halves (project overview, 8-table schema & ER diagram, constraints & triggers, normalization, transactions & concurrency, core SQL & BRIN indexing, `EXPLAIN ANALYZE` benchmarks, DB narration during the live demo, and Q&A lead). Siddhardth handles live features, application stack, dataset scale, end-to-end UI→API→DB request flow, driving the live demo, and the first half of challenges.
 
 | Slide | Topic | Lead |
 |---:|---|---|
@@ -18,7 +18,7 @@ Sai takes the heavy database-engineering halves (overview & MVP evolution, 8-tab
 | 2 | Project Overview | **Sai** |
 | 3 | Implemented Features | **Siddhardth** |
 | 4 | Application & Database Stack | **Siddhardth** |
-| 5 | Database Design: 5 MVP → 8 Tables | **Sai** |
+| 5 | Database Design: Eight-Table Schema | **Sai** |
 | 6 | Eight-Table ER Diagram (Full Slide) | **Sai** |
 | 7 | Constraints, Triggers & Security | **Sai** |
 | 8 | Normalization & Design Considerations | **Sai** |
@@ -29,7 +29,7 @@ Sai takes the heavy database-engineering halves (overview & MVP evolution, 8-tab
 | 13 | End-to-End Request Flow | **Siddhardth** |
 | 14 | Architecture Request Diagram (Full Slide) | **Siddhardth** |
 | 15 | Live Demo | **Siddhardth + Sai** |
-| 16 | Challenges, Fixes & Honest Scope | **Siddhardth + Sai** |
+| 16 | Challenges & Lessons Learned | **Siddhardth + Sai** |
 | 17 | Any Questions? / Thank You | **Sai + Siddhardth** |
 
 ---
@@ -38,31 +38,32 @@ Sai takes the heavy database-engineering halves (overview & MVP evolution, 8-tab
 
 ### Slide 1 — Title Slide *(~0:25)*
 **Sai:**  
-Hi Professor, hi everyone. I’m Sai, and this is Siddhardth. Today we’re presenting the final version of **PayLink** for Advanced Database Systems — our simulated peer-to-peer banking app built with Next.js, FastAPI, and PostgreSQL.
+Hi Professor, hi everyone. I’m Sai, and this is Siddhardth. Today we’re presenting **PayLink** for CS 5600 Advanced Database Systems — our full-stack simulated peer-to-peer banking application built with Next.js, FastAPI, and PostgreSQL.
 
-One quick note before we start: you already saw our five-table MVP earlier in the semester — that’s tagged `mvp-presented-baseline` in our repo. What we’re showing today is how we evolved that exact baseline into an eight-table transactional ledger based on your feedback. Everything here runs on Vercel, Render, and Supabase PostgreSQL — no AWS services are part of this database submission.
+Everything we’re showing today runs live on Vercel, Render, and Supabase PostgreSQL, backed by an eight-table transactional ledger and benchmarked locally on two million transfers.
 
 ---
 
-### Slide 2 — Project Introduction & MVP Evolution *(~0:55)*
+### Slide 2 — Project Overview *(~0:50)*
 **Sai:**  
-So here’s the big picture of what actually changed since the MVP.
+Here’s the big picture of what PayLink does and how the database powers it.
 
-Back at the MVP presentation, we had five tables, basic checks, small demo data, and `OR` queries that worked fine on a handful of rows. When we took your feedback seriously — especially around schema complexity, real constraints, normalization depth, dataset scale, and indexing rationale — we upgraded three major areas:
+PayLink is a simulated USD-only peer-to-peer banking platform with no real bank connections or real money movement. Behind the web interface, we designed an **eight-table PostgreSQL ledger** that handles multi-bank ownership, shared joint accounts, consent-based invitations, double-entry postings, and compensating transfer reversals.
 
-- First, we expanded from **five tables to eight**, adding double-entry `transfer_postings`, consent-based `account_invitations`, and compensating `transfer_reversals`.
-- Second, we built a **2-million-transfer local benchmark** — about 1.45 gigabytes — so we could measure real query plans instead of guessing on twelve demo rows.
-- And third, we rewrote our hot queries and added a **32-kilobyte BRIN index**, which took our local history and weekly insight queries from hundreds and thousands of milliseconds down to single-digit and sub-millisecond times.
+Three pillars hold the whole system together:
+- **Database-enforced integrity**: integer cents, 13 `NO ACTION` foreign keys, deferred double-entry triggers, Row-Level Security, and `SECURITY DEFINER` routines.
+- **Deterministic concurrency**: atomic `READ COMMITTED` transactions with advisory locks for idempotency and ordered row locking to eliminate deadlocks.
+- **Scale-tested performance**: a **2-million-transfer local benchmark** (~1.45 GB) where lateral index-only queries and a 32-kilobyte BRIN index cut query latency from hundreds and thousands of milliseconds down to single-digit and sub-millisecond times.
 
-Let me hand it to Siddhardth to walk through the features that are actually live right now.
+Let me hand it to Siddhardth to walk through the live application features.
 
 ---
 
-### Slide 3 — Implemented Features Live on Production *(~0:55)*
+### Slide 3 — Implemented Features *(~0:55)*
 **Siddhardth:**  
 Thanks Sai. On production right now, all six of these flows work end-to-end.
 
-Users sign up with Argon2id-hashed passwords and signed `HttpOnly` cookie sessions, or click straight into the Sai and Siddhardth demo accounts. Every new user automatically gets a $200 simulated checking account, can hold up to four accounts across banks, and can share joint accounts — except now, instead of instantly adding someone, you send a 168-hour invitation that they have to explicitly accept.
+Users sign up with Argon2id-hashed passwords and signed `HttpOnly` cookie sessions, or click straight into the Sai and Siddhardth demo accounts. Every new user automatically gets a $200 simulated checking account, can hold up to four accounts across banks, and can share joint accounts through a 168-hour consent-based invitation queue that requires explicit acceptance.
 
 For transfers, you look up a recipient by exact username, email, or phone, review the masked accounts and post-transfer balance, and submit with a client-generated UUID idempotency key. Every transfer writes paired debit and credit legs, and recipients can issue a compensating reversal without deleting history. We also have searchable activity, formula-safe CSV export, 7/30/90-day insights, and a read-only local PayBot.
 
@@ -78,18 +79,18 @@ Sai, over to you for the eight-table database design.
 
 ---
 
-### Slide 5 — Database Design: 5 MVP → 8 Tables *(~1:00)*
+### Slide 5 — Database Design: Eight-Table Schema *(~1:00)*
 **Sai:**  
-Thanks Siddhardth. Here’s how we evolved the five-table MVP into eight tables:
-- We kept the five MVP tables (`users`, `banks`, `bank_accounts`, `account_holders`, `transfers`) intact.
-- We added `transfer_postings` (strictly 1-to-2: one debit leg, one credit leg), `account_invitations` (168-hour consent queue before inserting into `account_holders`), and `transfer_reversals` (1-to-0..1 compensating transfer link with no deletes and no reversal chains).
-- And notice `bank_accounts` intentionally has no `user_id` column — M-to-N ownership through `account_holders` keeps **one** shared `balance_cents` row for joint accounts. Minimum one owner per account is enforced by `open_account()`, not a cross-table SQL `ASSERTION`.
+Thanks Siddhardth. Here’s how our eight-table schema is structured:
+- Five core tables handle users, banks, accounts, ownership, and transfer headers (`users`, `banks`, `bank_accounts`, `account_holders`, `transfers`).
+- Three specialized ledger and workflow tables complete the model: `transfer_postings` (strictly 1-to-2: one debit leg, one credit leg), `account_invitations` (168-hour consent queue before inserting into `account_holders`), and `transfer_reversals` (1-to-0..1 compensating transfer link with no deletes and no reversal chains).
+- And notice `bank_accounts` intentionally has no `user_id` column — M-to-N ownership through `account_holders` keeps **one** shared `balance_cents` row for joint accounts. Minimum one owner per account is enforced by `open_account()`.
 
 ---
 
 ### Slide 6 — Eight-Table ER Diagram (Full Slide) *(~0:50)*
 **Sai:**  
-Here’s the full eight-table ER model inside `paylink`: dark navy boxes are the five MVP tables, and teal boxes are the three post-MVP extensions. Everything pivots cleanly around `bank_accounts` and `transfers` with zero duplicated user or bank attributes.
+Here’s the full eight-table ER model inside our private `paylink` schema. Everything pivots cleanly around `bank_accounts` and `transfers` with zero duplicated user or bank attributes.
 
 ---
 
@@ -233,18 +234,12 @@ Let’s jump back to our last slide to wrap up.
 
 ---
 
-### Slide 16 — Challenges, Fixes & Honest Scope *(~1:10)*
+### Slide 16 — Challenges & Lessons Learned *(~1:00)*
 **Siddhardth:**  
-To close out, we hit four real database engineering challenges along the way. On my side, two big ones were **B-tree plan hijacking** — where a global `created_at` B-tree broke `HISTORY_SQL` until we switched to 32 KB BRIN plus `LATERAL` — and **foreign-key lock contention**, where `FOR UPDATE` on `users` blocked concurrent transfers until we downgraded it to `FOR NO KEY UPDATE`.
+To close out, we ran into four real database engineering challenges while building PayLink. On my side, two big ones were **B-tree plan hijacking** — where a global `created_at` B-tree regressed `HISTORY_SQL` until we switched to 32 KB BRIN plus `LATERAL` — and **foreign-key lock contention**, where `FOR UPDATE` on `users` blocked concurrent transfers until we downgraded it to `FOR NO KEY UPDATE`.
 
 **Sai:**  
-And two operational lessons on PostgreSQL: locally in Docker, parallel `VACUUM` aborted against the default 64 MiB `/dev/shm` limit after loading 2 million rows, so running `VACUUM (ANALYZE, PARALLEL 0)` was essential to refresh visibility maps for zero-heap-fetch Index-Only Scans. And on hosted Supabase, we learned to build indexes `CONCURRENTLY` outside transactions and keep hosted correctness evidence strictly separate from local 2-million-row benchmarks.
-
-On the right, we’re keeping our limitations completely transparent:
-- Hosted Supabase only has 12 rows, so it uses Sequential Scans, not BRIN.
-- Our independent UI visual review ended **FAIL** (89, 92, 96/100; no overall pass), and we merged the UI as our current look without claiming a pass.
-- PayBot returns deterministic local answers because our AWS Bedrock quota is zero.
-- And point-in-time backup restore and production-scale load drills were outside our test scope.
+And two operational lessons on PostgreSQL: locally in Docker, parallel `VACUUM` hit the default 64 MiB `/dev/shm` limit after loading 2 million rows, so running `VACUUM (ANALYZE, PARALLEL 0)` was essential to refresh visibility maps for zero-heap-fetch Index-Only Scans. And on hosted Supabase, we built new indexes `CONCURRENTLY` outside explicit transactions and kept our small 12-row live demo separate from the 2-million-row local benchmark where BRIN and `LATERAL` really shine.
 
 Thank you so much — let’s move to our closing slide!
 
