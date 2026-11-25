@@ -164,7 +164,12 @@ Use `.agents/skills/strict-design-reviewer/SKILL.md` for the ten-category rubric
 findings schema and PASS/FAIL gate. Capture before editing the app. Preserve
 immutable before images; create after images separately. Run deterministic
 Playwright geometry, accessibility, interaction and screenshot checks. Only an
-independent evidence review can approve reference captures; never update a
-snapshot simply to suppress a failure. Zero unresolved Critical/Major findings
+independent evidence review normally approves reference captures; never update a
+snapshot simply to suppress a failure. The owner-requested current-look lock is
+an explicit exception: only Venkatasai's merge of its separate proposal PR into
+main accepts that reference, while the overall review remains FAIL and the
+focused Amount check remains finding-only. It grants no overall PASS, new score
+or accessibility certification. Unmerged proposals cannot unlock CI.
+Zero unresolved Critical/Major findings
 and at least 95/100 are required for PASS; a score does not replace objective
 checks or establish production readiness.
