@@ -1,34 +1,36 @@
 # PayLink — CS 5600 Advanced Database Systems Presentation Script
 
 **Speakers:** Venkata Sai Kadamati (**Sai**) and **Siddhardth**  
-**Deck:** `docs/adb-final-presentation.pptx` (15 slides)  
-**Companion Report:** `docs/adb-final-report.pdf`  
+**Deck:** `docs/adb-final-presentation.pptx` (17 slides, built on the shared `EcoCraft_Cloud_Presentation.pptx` template)  
+**Companion Report:** `docs/adb-final-report.pdf` (built in the exact `EcoCraft_AWS_Deployment_Report.docx` style)  
 **Live App:** `https://paylink-radiant690s-projects.vercel.app/`  
-**Estimated Time:** ~14–16 minutes + Q&A *(no presentation time limit was specified in the supplied guide `info.md`; shorten or expand the live demo on Slide 14 to fit the room)*
+**Estimated Time:** ~14–16 minutes + Q&A *(no presentation time limit was specified in the supplied guide `info.md`; shorten or expand the live demo on Slide 15 to fit the room)*
 
 ---
 
 ## How the Talk Is Split
 
-Sai takes the heavy database-engineering halves (overview & MVP evolution, 8-table ER model, schema decisions, constraints & triggers, normalization, transactions & concurrency, core SQL, indexing & BRIN vs. B-tree, `EXPLAIN ANALYZE` benchmarks, DB narration during the live demo, and Q&A lead). Siddhardth handles the live features, dataset provenance, end-to-end UI→API→DB request flow, driving the live demo, and the first half of challenges.
+Sai takes the heavy database-engineering halves (overview & MVP evolution, 8-table schema & ER diagram, constraints & triggers, normalization, transactions & concurrency, core SQL & BRIN indexing, `EXPLAIN ANALYZE` benchmarks, DB narration during the live demo, and Q&A lead). Siddhardth handles live features, application stack, dataset provenance, end-to-end UI→API→DB request flow, driving the live demo, and the first half of challenges.
 
 | Slide | Topic | Lead |
 |---:|---|---|
 | 1 | Title Slide | **Sai** |
-| 2 | Project Introduction & MVP Evolution | **Sai** |
-| 3 | Implemented Features Live on Production | **Siddhardth** |
-| 4 | Eight-Table ER Model (`paylink` Schema) | **Sai** |
-| 5 | Key Relationships & Structural Decisions | **Sai** |
-| 6 | Integrity Constraints, Deferred Triggers & Security | **Sai** |
-| 7 | Normalization (1NF → BCNF & 3NF on `transfer_postings`) | **Sai** |
-| 8 | Transactions, Locking & Deadlock Prevention | **Sai** |
-| 9 | Dataset Source & Size (Hosted vs. 2M Local Benchmark) | **Siddhardth** |
-| 10 | Core Production SQL Patterns | **Sai** |
-| 11 | Indexing Strategy & Why BRIN Beat B-Tree | **Sai** |
-| 12 | Query Optimization Results (`EXPLAIN ANALYZE`) | **Sai** |
-| 13 | End-to-End Request Flow (UI → FastAPI → PostgreSQL) | **Siddhardth** |
-| 14 | Live Application Demo | **Siddhardth + Sai** |
-| 15 | Challenges, Honest Scope & Q&A | **Siddhardth + Sai** |
+| 2 | Project Overview | **Sai** |
+| 3 | Implemented Features | **Siddhardth** |
+| 4 | Application & Database Stack | **Siddhardth** |
+| 5 | Database Design: 5 MVP → 8 Tables | **Sai** |
+| 6 | Eight-Table ER Diagram (Full Slide) | **Sai** |
+| 7 | Constraints, Triggers & Security | **Sai** |
+| 8 | Normalization & Design Considerations | **Sai** |
+| 9 | Transactions, Locking & Concurrency | **Sai** |
+| 10 | Dataset Source & Size | **Siddhardth** |
+| 11 | Core SQL Queries & Indexing Strategy | **Sai** |
+| 12 | Query Optimization Benchmark Chart (Full Slide) | **Sai** |
+| 13 | End-to-End Request Flow | **Siddhardth** |
+| 14 | Architecture Request Diagram (Full Slide) | **Siddhardth** |
+| 15 | Live Demo | **Siddhardth + Sai** |
+| 16 | Challenges, Fixes & Honest Scope | **Siddhardth + Sai** |
+| 17 | Any Questions? / Thank You | **Sai + Siddhardth** |
 
 ---
 
@@ -68,30 +70,30 @@ Sai, do you want to walk through how the eight tables fit together?
 
 ---
 
-### Slide 4 — Eight-Table ER Model *(~0:55)*
-**Sai:**  
-Yeah — here’s the full eight-table ER diagram inside our private `paylink` schema.
+### Slide 4 — Application & Database Stack *(~0:40)*
+**Siddhardth:**  
+Quick overview of how the pieces run in production: the frontend is Next.js App Router on Vercel, the backend is Python FastAPI with a `psycopg` pool on Render, and our hosted database is Supabase PostgreSQL 17.11 inside a private `paylink` schema excluded from Supabase’s public Data API. For scale testing, we run a separate local Docker PostgreSQL 16.16 instance with 2 million synthetic transfers. The browser only ever hits same-origin `/api/*`, and FastAPI connects as our restricted `paylink_api` role.
 
-The dark navy boxes are the five tables you saw in the MVP: `users`, `banks`, `bank_accounts`, `account_holders`, and `transfers`. The three teal boxes on the right and bottom are what we added after your feedback: `transfer_postings`, `account_invitations`, and `transfer_reversals`.
-
-Notice how everything pivots around `bank_accounts` and `transfers` — nothing duplicates user info or bank info, and nothing mutates past transfers. Let me click to the next slide to call out the exact cardinalities and why we modeled them this way.
+Sai, over to you for the eight-table database design.
 
 ---
 
-### Slide 5 — Key Relationships & Structural Decisions *(~1:00)*
+### Slide 5 — Database Design: 5 MVP → 8 Tables *(~1:00)*
 **Sai:**  
-There are four structural choices here that really matter for a banking schema:
-
-- First, **`bank_accounts` has no `user_id` column**. Ownership is strictly M-to-N through `account_holders(user_id, account_id)`. That means when Siddhardth and I share a joint account, there is still only **one** `balance_cents` row — no split balances that can drift apart.
-- Second, **`transfers` to `transfer_postings` is strictly 1-to-2** — one negative debit leg and one positive credit leg for every committed transfer.
-- Third, **`account_invitations`** sits in front of `account_holders`, so a joint-owner request has its own 168-hour lifecycle before ownership is ever granted.
-- Fourth, **`transfer_reversals`** is 1-to-0..1 on `transfers`. We never edit or delete a completed transfer; a reversal creates a brand-new compensating transfer and blocks reversal chains.
-
-And just to be completely honest on modeling: "every account has at least one owner" is enforced by our `open_account()` routine, not a cross-table SQL `ASSERTION`, since PostgreSQL doesn’t support declarative cross-table assertions.
+Thanks Siddhardth. Here’s how we evolved the five-table MVP into eight tables:
+- We kept the five MVP tables (`users`, `banks`, `bank_accounts`, `account_holders`, `transfers`) intact.
+- We added `transfer_postings` (strictly 1-to-2: one debit leg, one credit leg), `account_invitations` (168-hour consent queue before inserting into `account_holders`), and `transfer_reversals` (1-to-0..1 compensating transfer link with no deletes and no reversal chains).
+- And notice `bank_accounts` intentionally has no `user_id` column — M-to-N ownership through `account_holders` keeps **one** shared `balance_cents` row for joint accounts. Minimum one owner per account is enforced by `open_account()`, not a cross-table SQL `ASSERTION`.
 
 ---
 
-### Slide 6 — Integrity Constraints, Deferred Triggers & Security *(~1:10)*
+### Slide 6 — Eight-Table ER Diagram (Full Slide) *(~0:50)*
+**Sai:**  
+Here’s the full eight-table ER model inside `paylink`: dark navy boxes are the five MVP tables, and teal boxes are the three post-MVP extensions. Everything pivots cleanly around `bank_accounts` and `transfers` with zero duplicated user or bank attributes.
+
+---
+
+### Slide 7 — Constraints, Triggers & Security *(~1:10)*
 **Sai:**  
 One of your biggest pieces of feedback was: *what constraints did you actually apply in the database?* We didn’t leave integrity to the frontend or FastAPI — we enforced it in five layers inside PostgreSQL.
 
@@ -103,7 +105,7 @@ One of your biggest pieces of feedback was: *what constraints did you actually a
 
 ---
 
-### Slide 7 — Normalization & Design Considerations *(~1:05)*
+### Slide 8 — Normalization & Design Considerations *(~1:05)*
 **Sai:**  
 For normalization, we didn’t just stamp "BCNF" on everything and move on.
 
@@ -115,7 +117,7 @@ Similarly, `balance_cents` on `bank_accounts` is a materialized cache of `openin
 
 ---
 
-### Slide 8 — Transactions, Locking & Deadlock Prevention *(~1:10)*
+### Slide 9 — Transactions, Locking & Concurrency *(~1:10)*
 **Sai:**  
 Now let’s look at the exact concurrency implementation inside `paylink.execute_transfer()`. We run under PostgreSQL’s default `READ COMMITTED` with explicit deterministic locks, which avoids `SERIALIZABLE` retry aborts.
 
@@ -135,7 +137,7 @@ Siddhardth, want to cover where our data comes from and how big it is?
 
 ---
 
-### Slide 9 — Dataset Source & Size *(~0:55)*
+### Slide 10 — Dataset Source & Size *(~0:55)*
 **Siddhardth:**  
 Sure. We keep our live demo database and our scale-testing database completely separate.
 
@@ -147,7 +149,7 @@ One important thing we want to be upfront about: because hosted Supabase only ha
 
 ---
 
-### Slide 10 — Core Production SQL Patterns *(~1:05)*
+### Slide 11 — Core SQL Queries & Indexing Strategy *(~1:30)*
 **Sai:**  
 Thanks Siddhardth. Here are the three main SQL patterns we actually run in production and analytics.
 
@@ -159,7 +161,7 @@ Third, in `docs/queries.sql`, we use a `SUM(change_cents) OVER (ORDER BY created
 
 ---
 
-### Slide 11 — Indexing Strategy & Why BRIN Beat B-Tree *(~1:05)*
+**Indexing Strategy & Why BRIN Beat B-Tree (still on Slide 11):**
 **Sai:**  
 Across all eight tables, we have **24 indexes** — 16 primary/unique indexes plus 8 secondary access-path indexes.
 
@@ -171,7 +173,7 @@ Switching to a **BRIN index (`pages_per_range = 128`)** fixed both issues. Becau
 
 ---
 
-### Slide 12 — Query Optimization Results (`EXPLAIN ANALYZE`) *(~0:45)*
+### Slide 12 — Query Optimization Benchmark Chart (Full Slide) *(~0:45)*
 **Sai:**  
 Here are the local `EXPLAIN (ANALYZE, BUFFERS)` results — medians of three alternating runs on 2,000,007 transfers with default planner settings:
 
