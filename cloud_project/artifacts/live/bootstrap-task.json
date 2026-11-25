@@ -1,0 +1,13 @@
+{
+    "task": "arn:aws:ecs:us-east-1:223662763933:task/paylink-class-demo-cluster/bab82e617cb949bb9a3f09fb4baf652d",
+    "status": "STOPPED",
+    "started": 1795633224.795,
+    "stopped": 1795633252.438,
+    "containers": [
+        {
+            "name": "bootstrap",
+            "exit": 0,
+            "version": "sha256:e81081e9cda7424a3e9e3465aabe1c0cd7165afb7b5a425d3f63a720182636ad"
+        }
+    ]
+}

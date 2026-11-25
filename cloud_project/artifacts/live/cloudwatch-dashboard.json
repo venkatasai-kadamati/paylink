@@ -1,0 +1,25 @@
+{
+  "name": "paylink-class-demo-ops",
+  "widgets": [
+    {
+      "type": "metric",
+      "title": "ECS CPU Utilization",
+      "period": 60
+    },
+    {
+      "type": "metric",
+      "title": "ALB RequestCount / TargetResponseTime",
+      "period": 60
+    },
+    {
+      "type": "metric",
+      "title": "RDS CPU / Connections",
+      "period": 60
+    },
+    {
+      "type": "metric",
+      "title": "CloudFront 4xx / 5xx / Requests",
+      "period": 60
+    }
+  ]
+}

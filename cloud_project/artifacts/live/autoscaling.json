@@ -1,0 +1,7 @@
+[
+    {
+        "id": "service/paylink-class-demo-cluster/paylink-class-demo-backend",
+        "min": 1,
+        "max": 2
+    }
+]
