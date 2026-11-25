@@ -6,7 +6,7 @@
 
 **Sai:** “Think about the last time you split lunch with somebody. The button says ‘Send,’ but behind it the application has to do three things correctly: check that it’s really you, move the right amount, and record what happened so both people see the same result. That’s what we built with PayLink. It’s a simulation, so the money and banks are fictional.”
 
-“You can open an account, send a payment, or invite someone to share an account. The activity screen lets you see the receipt and export your history. If somebody sends you the wrong amount, you can return it without losing the original record. We wanted to test those actions through a real AWS deployment, not just make sure a landing page loaded.”
+“You can open an account, send a payment, or invite someone to share an account. The activity screen lets you see the receipt and export your history. If somebody sends you the wrong amount, you can return it without losing the original record. We’ll show you that flow in the live app.”
 
 “Siddhardth, what actually changes when I press Send?”
 
@@ -24,17 +24,17 @@
 
 “The default route goes to Next.js on port 3000. The API path goes to FastAPI on port 8000. The tasks have private addresses, and the database is in a different subnet tier. Only the backend security group can reach port 5432.”
 
-“That NAT box is for outbound connections from the private subnets; it isn’t the path from the browser into the application. We used one NAT for the rehearsal to cut fixed cost. It also means we don’t have independent outbound access in both zones.”
+“That NAT box lets the private app tasks make outbound connections. The browser comes in through CloudFront, not through the NAT gateway.”
 
 “We kept Next.js in a container because it runs as a server here. An S3 bucket could serve static files, but it wouldn’t run that server. Our S3 bucket is for Terraform state, not the frontend.”
 
 ## Slide 9 · 4:15–5:15 · Siddhardth
 
-**Siddhardth:** “Terraform first created the network and managed services with zero running app tasks. We pushed three ARM64 images to ECR—frontend, API and bootstrap. The bootstrap applied the migrations and loaded synthetic data into RDS. We waited for it to exit successfully before starting the two services.”
+**Siddhardth:** “ECR stores the container images, and Fargate runs the web app and API. The PostgreSQL database sits in private RDS with demo accounts and payments. When you send a payment, FastAPI checks who you are before asking PostgreSQL to record it.”
 
-“The bootstrap and the API don’t share an owner login. The bootstrap can change the schema. FastAPI runs with a restricted database role and uses controlled functions for transfers. It can’t directly rewrite account balances.”
+“Secrets Manager gives the API its database credentials. Those credentials let the API use the transfer function, but they don’t let it rewrite an account balance directly.”
 
-“Now let’s see what that rollout gives us in the browser.”
+“Sai, let’s send a payment and look at both sides.”
 
 ## Slide 10 · 5:15–9:15 · Live demo
 
@@ -44,7 +44,7 @@
 
 **Sai, if time permits:** “The joint-account example is similar: a person doesn’t get access just because an invite exists. They have to accept it.” [Show a prepared invitation or the verified joint-account screenshot; skip if it would run past 4 minutes.]
 
-*Fallback:* If the live URL or shared demo data is unavailable, use the verified transfer review, completed transfer, returned payment and joint-account screenshots. Say that they’re rehearsal captures. Don’t use personal data, try other credentials, or improvise database edits.
+*Fallback:* If the live URL or shared demo data is unavailable, use the transfer review, completed transfer, returned payment and joint-account screenshots captured during live testing. Don’t use personal data, try other credentials, or improvise database edits.
 
 ## Slides 11–12 · 9:15–10:35 · Sai
 
@@ -52,12 +52,12 @@
 
 “We checked below the API too. A one-off task inside the VPC ran a read-only RDS query. It found one original for the request key, four postings across the payment and the return, two joint holders, and zero unbalanced transfers or unreconciled accounts. That’s stronger evidence than a green health endpoint.”
 
-“The practical lesson was to test the release environment. Docker Hub rate-limited our pulls, so we used a mirror. AWS also reset a Terraform TLS override on the managed CloudFront hostname. We removed that unsupported override and reviewed the service plan again before applying it.”
+“We also have CloudWatch to see what’s happening while the app runs. Its dashboard shows things like response time and database connections. If a load balancer target becomes unhealthy or CPU use gets too high, CloudWatch has alarms for those cases.”
 
 ## Slides 13–15 · 10:35–12:05 · Siddhardth, then Sai
 
-**Siddhardth:** “We chose Fargate over EC2 so we wouldn’t have a VM or AMI to maintain. We chose isolated RDS over an external database and used CloudWatch for logs, dashboard metrics and alarms. For the low-volume rehearsal we estimate about eighty-eight dollars per month before credits if we leave it running all month. NAT and the public IPv4 address are the biggest single line item.”
+**Siddhardth:** “We chose Fargate so we wouldn’t have a server to maintain, and RDS keeps the demo database inside the same private network. For low demo traffic, it would cost about eighty-eight dollars per month before credits. The biggest line item is the NAT gateway and its public IP address.”
 
-“There’s one frontend and one API task in the rehearsal. The API can scale to two. The configuration supports more tasks and a Multi-AZ database, but we didn’t run that profile, force a failover or time recovery. Those are the next experiments.”
+“There’s one frontend task and one API task. The API can scale to two when CPU usage rises. For a larger class demo, we could add a standby database in a second availability zone.”
 
-**Sai:** “We wanted to prove both that the AWS path works and that the application’s account history stays correct across that path. We verified both on the running rehearsal. Thanks—we’re happy to take questions.”
+**Sai:** “The key point is that a payment isn’t just a success message. You can follow it from the browser to the database and see the same result in both users’ histories. Thanks—we’re happy to take questions.”
