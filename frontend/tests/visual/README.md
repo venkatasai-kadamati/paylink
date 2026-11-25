@@ -75,9 +75,10 @@ banking requests or evidence of ledger correctness.
 | Balance | [PNG](references/balance-360.png) | [PNG](references/balance-390.png) | [PNG](references/balance-768.png) | [PNG](references/balance-1280.png) | [PNG](references/balance-1440.png) |
 
 The directory and manifest also include account details, Send recipient/details/
-review, masked/revealed PayBot, chart periods/day selection, Activity filters,
+review, masked PayBot, chart periods/day selection, Activity filters,
 empty/long content, loading and error states. No payment is confirmed by the
-capture harness; these images do not replace the separate banking regression.
+capture harness; reveal/focus is interaction-checked rather than a separate PNG.
+These images do not replace the separate banking regression.
 
 CI fetches `main` and requires its accepted reference lock to exist **and be
 unchanged by the PR** before comparing. Consequently this initial proposal's
