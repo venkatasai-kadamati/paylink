@@ -1,7 +1,8 @@
 """Deterministic real-component visual/a11y gates. All API traffic is local fixtures.
 
-Default: compare against independently approved images. --candidate writes only
-unapproved review candidates; it cannot overwrite references or approve itself.
+Default: compare against hash-locked reference files. A reference-lock PR only
+proposes those files; owner merge into main accepts the current look, not a
+design-review PASS. --candidate cannot overwrite references or approve itself.
 Run against a current-source Next production server on localhost:3100.
 """
 from __future__ import annotations
@@ -184,9 +185,9 @@ def main():
             if not args.candidate:
                 ref = REFERENCE / filename
                 expected_sha = approved.get("images", {}).get(filename)
-                check(ref.is_file() and expected_sha is not None, filename + ": missing independent approval")
+                check(ref.is_file() and expected_sha is not None, filename + ": missing reference lock entry")
                 if ref.is_file() and expected_sha:
-                    check(hashlib.sha256(ref.read_bytes()).hexdigest() == expected_sha, filename + ": reference changed after approval")
+                    check(hashlib.sha256(ref.read_bytes()).hexdigest() == expected_sha, filename + ": reference differs from locked hash")
                     actual, expected_image = Image.open(target).convert("RGB"), Image.open(ref).convert("RGB")
                     check(actual.size == expected_image.size, filename + ": size changed")
                     if actual.size == expected_image.size:

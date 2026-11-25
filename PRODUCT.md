@@ -73,9 +73,9 @@ No “How to test” or quick walkthrough content in the product.
 ## Delivery boundaries
 
 Evolve the presented MVP instead of replacing its architecture. Preserve every
-existing flow. The current review PR stays unmerged until Venkatasai's personal
-review; do not change production. Hosted checks are read-only because the review
-preview shares demo data. Full write verification uses the isolated local DB.
+existing flow. Keep review PRs unmerged until the owner acts; production changes
+need authorization. Hosted checks are read-only because production and the review
+preview share demo data. Full write verification uses the isolated local DB.
 
 Keep AWS unchanged unless explicitly approved. The model-only Bedrock key stays
 on Render; Vercel preview PayBot uses local answers. Do not describe local answers
@@ -90,3 +90,9 @@ Taste contributes supplementary art direction only. The strict reviewer defines
 the single evidence, severity and scoring contract. Preserve observed strengths,
 fix rendered defects first, and require independent screenshot review plus
 objective accessibility, responsive and banking checks before visual acceptance.
+
+The owner's explicitly requested current-look reference-lock PR is a narrow
+exception: Venkatasai merging it accepts the visual reference, not the overall
+design review, accessibility certification, or production readiness. While that
+PR is unmerged its snapshots remain proposals and cannot unlock CI. The three
+full-review FAIL results and Amount-only finding PASS remain unchanged.

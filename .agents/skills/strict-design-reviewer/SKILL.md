@@ -69,6 +69,15 @@ hashes. Never refresh a reference merely to hide a failed diff. Baseline creatio
 and baseline approval are separate events; unapproved images cannot silently
 turn a CI gate green.
 
+**Explicit owner exception:** Venkatasai has requested a separate, unmerged PR
+proposing the current look as a reference despite the recorded overall FAIL.
+His merge of that PR into main is visual-reference acceptance only. Preserve all
+three full-review FAIL outcomes and the finding-only Amount PASS; do not issue a
+new overall verdict or start another review cycle. Until that merge, the captures
+remain proposed and CI's reference-acceptance gate stays blocked. This exception
+does not lower the rubric, waive limitations, or authorize an agent to accept
+its own screenshots. See `frontend/tests/visual/README.md` for the lock procedure.
+
 ## Rubric and verdict
 
 Score each category out of ten, with screenshot/check evidence and a specific

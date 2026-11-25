@@ -27,10 +27,19 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Require independent reference approval
+      - name: Require owner-accepted references on main
         run: |
-          if [ ! -f frontend/tests/visual/references/approved.json ]; then
-            echo '::error::Visual approval is withheld. Commit independently accepted references before enabling comparison; never approve candidates to silence this gate.'
+          # A proposal cannot approve itself by adding approved.json in this PR.
+          # Acceptance is Venkatasai's explicit merge of the reference-lock PR.
+          git fetch --no-tags --depth=1 origin main
+          accepted=$(git rev-parse FETCH_HEAD)
+          references=frontend/tests/visual/references
+          if ! git cat-file -e "$accepted:$references/approved.json" 2>/dev/null; then
+            echo '::error::Reference acceptance is pending. Venkatasai must merge the reference-lock PR to accept the current look; this is not an overall design-review PASS.'
+            exit 1
+          fi
+          if ! git diff --quiet "$accepted" HEAD -- "$references"; then
+            echo '::error::This PR changes the reference lock. Only Venkatasai merging that explicit proposal accepts those pixels; candidates cannot approve themselves.'
             exit 1
           fi
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
