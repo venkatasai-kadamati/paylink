@@ -26,6 +26,10 @@ with psycopg.connect(config['ADMIN_DATABASE_URL']) as c:
         c.execute(sql.SQL('CREATE ROLE paylink_api LOGIN PASSWORD {}').format(sql.Literal(unquote(api.password or ''))))
     c.execute('GRANT USAGE ON SCHEMA paylink TO paylink_api')
     c.execute('GRANT INSERT ON paylink.users TO paylink_api')
+    # New invitation/ledger tables are reachable only through actor-scoped
+    # SECURITY DEFINER functions, not broad backend table privileges. Revoke
+    # grants left by older versions of this idempotent provisioning script.
+    c.execute('REVOKE ALL ON paylink.account_invitations,paylink.transfer_postings,paylink.transfer_reversals FROM paylink_api')
     for table in ('users','banks','bank_accounts','account_holders','transfers'):
         c.execute(sql.SQL('GRANT SELECT ON paylink.{} TO paylink_api').format(sql.Identifier(table)))
         if not c.execute('SELECT 1 FROM pg_policies WHERE schemaname=%s AND tablename=%s AND policyname=%s',('paylink',table,'backend_read')).fetchone():

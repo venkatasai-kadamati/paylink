@@ -1,0 +1,22 @@
+{
+  "description": "Declared deterministic local visual simulation data; GET-only recipient/owner fixtures; no transfer confirmation.",
+  "recipients": [
+    {
+      "id": "bed32e20-772a-59b0-b0c2-882184252e6b",
+      "username": "siddhardth",
+      "full_name": "Siddhardth",
+      "account_id": "a4ddd79e-96d1-5e04-a0ad-426ec692ee42",
+      "bank_name": "Meridian Bank",
+      "last4": "2908",
+      "account_type": "checking",
+      "holder_count": 1
+    }
+  ],
+  "owners": [
+    {
+      "full_name": "Sai Kadamati",
+      "username": "sai",
+      "joined_at": "2026-01-01T12:00:00Z"
+    }
+  ]
+}

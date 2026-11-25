@@ -39,6 +39,6 @@ For future code changes, push reviewed source to main and inspect Render/Vercel 
 
 See validation.md, hosted-browser-results.json, hosted-database-evidence.json, hosted-advisors.json, and the actual Supabase screenshot. Security advisors returned no findings; informational unused indexes on the small dataset are not grounds to remove the history indexes without workload evidence.
 
-Render's free service can sleep. Warm the public app and API health, then sign in before recording. Backup/restore, crash recovery, sustained hosted load, a distributed limiter, ownership revocation, and a tamper-proof ledger remain future work. Invitation acceptance and paired transfer postings are available through the backend, not new UI features. No real banks or funds are connected.
+Render's free service can sleep. Warm the public app and API health, then sign in before recording. Backup/restore, crash recovery, sustained hosted load, a distributed limiter, ownership revocation, and a tamper-proof ledger remain future work. The workspace uses the invitation, transfer detail, and reversal endpoints for joint-account requests and transfer returns. No real banks or funds are connected.
 
 The starting_balance_200 migration changes only defaults; existing account balances are preserved. Application revision eed5ec1 introduces automatic $200 checking-account creation during registration and the refined interface.
