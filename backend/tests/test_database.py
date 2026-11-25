@@ -152,6 +152,9 @@ def case():
         c.execute('INSERT INTO paylink.account_holders(user_id,account_id) VALUES(%s,%s),(%s,%s)',(actor,a,other,b))
     yield actor,other,bank,a,b
     with psycopg.connect(C['ADMIN_DATABASE_URL']) as c:
+        c.execute('DELETE FROM paylink.account_invitations WHERE inviter_id IN(%s,%s) OR invitee_id IN(%s,%s)',(actor,other,actor,other))
+        c.execute('DELETE FROM paylink.transfer_reversals WHERE original_transfer_id IN (SELECT id FROM paylink.transfers WHERE initiated_by IN(%s,%s))',(actor,other))
+        c.execute('DELETE FROM paylink.transfer_postings WHERE transfer_id IN (SELECT id FROM paylink.transfers WHERE source_account_id IN(%s,%s) OR destination_account_id IN(%s,%s))',(a,b,a,b))
         c.execute('DELETE FROM paylink.transfers WHERE source_account_id IN(%s,%s) OR destination_account_id IN(%s,%s)',(a,b,a,b))
         c.execute('DELETE FROM paylink.account_holders WHERE user_id IN(%s,%s)',(actor,other))
         c.execute('DELETE FROM paylink.bank_accounts WHERE bank_id=%s',(bank,))
@@ -301,8 +304,12 @@ def test_joint_ownership_limit_serializes_with_account_opening(case):
 
 def test_application_schema_and_restricted_privileges():
     with psycopg.connect(C['DATABASE_URL']) as c:
-        assert {r[0] for r in c.execute("SELECT tablename FROM pg_tables WHERE schemaname='paylink'")}=={'users','banks','bank_accounts','account_holders','transfers'}
+        new_tables={'account_invitations','transfer_postings','transfer_reversals'}
+        assert {r[0] for r in c.execute("SELECT tablename FROM pg_tables WHERE schemaname='paylink'")}=={'users','banks','bank_accounts','account_holders','transfers'} | new_tables
         assert all(r[0] for r in c.execute("SELECT rowsecurity FROM pg_tables WHERE schemaname='paylink'"))
+        for table in new_tables:
+            for privilege in ('SELECT','INSERT','UPDATE','DELETE'):
+                assert not c.execute('SELECT has_table_privilege(current_user,%s,%s)',('paylink.'+table,privilege)).fetchone()[0]
         for table in ('bank_accounts','account_holders','transfers'):
             for privilege in ('INSERT','UPDATE','DELETE'):
                 assert not c.execute('SELECT has_table_privilege(current_user,%s,%s)',('paylink.'+table,privilege)).fetchone()[0]
@@ -329,3 +336,114 @@ def test_owner_allocation_lock_allows_unrelated_transfer_fk_check(case):
         with ThreadPoolExecutor(1) as worker:
             worker.submit(send_while_grant_open).result(timeout=4)
     assert balances(a,b)=={a:9900,b:10000}
+
+def invite(actor,account,target):
+    with psycopg.connect(C['DATABASE_URL']) as c:
+        return c.execute('SELECT id FROM paylink.send_account_invitation(%s,%s,%s)',
+                         (actor,account,username(target))).fetchone()[0]
+
+def decide(actor,invitation,decision='accepted'):
+    with psycopg.connect(C['DATABASE_URL']) as c:
+        return c.execute('SELECT decision FROM paylink.decide_account_invitation(%s,%s,%s)',
+                         (actor,invitation,decision)).fetchone()[0]
+
+def test_invitation_access_expiry_and_reissue(case):
+    u,v,_,a,_=case
+    with pytest.raises(errors.RaiseException,match='do not own'):
+        invite(v,a,u)
+    first=invite(u,a,v)
+    assert invite(u,a,v)==first
+    with pytest.raises(errors.RaiseException,match='not available'):
+        decide(u,first)
+    with psycopg.connect(C['ADMIN_DATABASE_URL']) as c:
+        c.execute("UPDATE paylink.account_invitations SET created_at=now()-interval '2 days', expires_at=now()-interval '1 day' WHERE id=%s",(first,))
+    with psycopg.connect(C['DATABASE_URL']) as c:
+        assert c.execute('SELECT status FROM paylink.list_account_invitations(%s)',(v,)).fetchone()==('expired',)
+        assert c.execute('SELECT id FROM paylink.list_account_invitations(%s)',(uuid4(),)).fetchall()==[]
+    with pytest.raises(errors.RaiseException,match='expired'):
+        decide(v,first)
+    second=invite(u,a,v)
+    assert second!=first
+    assert decide(v,second,'declined')=='declined'
+    third=invite(u,a,v)
+    assert decide(u,third,'cancelled')=='cancelled'
+    fourth=invite(u,a,v)
+    assert decide(v,fourth)==decide(v,fourth)=='accepted'
+    with psycopg.connect(C['ADMIN_DATABASE_URL']) as c:
+        assert c.execute("SELECT decision FROM paylink.account_invitations WHERE id=%s",(first,)).fetchone()==('expired',)
+        assert c.execute('SELECT count(*) FROM paylink.account_holders WHERE user_id=%s AND account_id=%s',(v,a)).fetchone()==(1,)
+
+def test_invitation_acceptance_serializes_with_opening(case):
+    u,v,bank,a,_=case
+    invitation=invite(u,a,v)
+    def open_one():
+        with psycopg.connect(C['DATABASE_URL']) as c:
+            return c.execute("SELECT paylink.open_account(%s,%s,'savings','Invitation race')",(v,bank)).fetchone()
+    open_one(); open_one()
+    def attempt(fn):
+        try:
+            fn()
+            return True
+        except errors.RaiseException as e:
+            assert 'four accounts' in str(e)
+            return False
+    with ThreadPoolExecutor(2) as pool:
+        assert sorted(pool.map(attempt,(open_one,lambda:decide(v,invitation))))==[False,True]
+    with psycopg.connect(C['ADMIN_DATABASE_URL']) as c:
+        assert c.execute('SELECT count(*) FROM paylink.account_holders WHERE user_id=%s',(v,)).fetchone()==(4,)
+
+def reverse(actor,original,key,reason='Duplicate payment'):
+    with psycopg.connect(C['DATABASE_URL']) as c:
+        return c.execute('SELECT reversing_transfer_id FROM paylink.reverse_transfer(%s,%s,%s,%s)',
+                         (actor,original,reason,key)).fetchone()[0]
+
+def test_reversal_and_postings(case):
+    u,v,_,a,b=case
+    original=transfer(u,a,b,500)
+    with pytest.raises(errors.RaiseException,match='not available'):
+        reverse(u,original,uuid4())
+    key=uuid4()
+    with ThreadPoolExecutor(2) as pool:
+        ids=set(pool.map(lambda _:reverse(v,original,key),range(2)))
+    assert len(ids)==1
+    compensation=ids.pop()
+    assert balances(a,b)=={a:10000,b:10000}
+    with pytest.raises(errors.RaiseException,match='already reversed'):
+        reverse(v,original,key,'Different reason')
+    with pytest.raises(errors.RaiseException,match='already reversed'):
+        reverse(v,original,uuid4())
+    with pytest.raises(errors.RaiseException,match='cannot be reversed'):
+        reverse(u,compensation,uuid4())
+    with psycopg.connect(C['DATABASE_URL']) as c:
+        postings,reversal=c.execute('SELECT postings,reversal FROM paylink.transfer_detail(%s,%s)',(v,original)).fetchone()
+        assert postings==[{'side':'debit','account_id':str(a),'delta_cents':-500},
+                          {'side':'credit','account_id':str(b),'delta_cents':500}]
+        assert reversal['reversing_transfer_id']==str(compensation)
+        assert c.execute('SELECT * FROM paylink.transfer_detail(%s,%s)',(uuid4(),original)).fetchone() is None
+
+def test_reversal_rolls_back_when_balance_insufficient(case):
+    u,v,_,a,b=case
+    original=transfer(u,a,b,500)
+    transfer(v,b,a,10300)
+    key=uuid4()
+    with pytest.raises(errors.RaiseException,match='Insufficient funds'):
+        reverse(v,original,key)
+    assert balances(a,b)=={a:19800,b:200}
+    with psycopg.connect(C['ADMIN_DATABASE_URL']) as c:
+        assert c.execute('SELECT id FROM paylink.transfers WHERE initiated_by=%s AND idempotency_key=%s',(v,key)).fetchone() is None
+        assert c.execute('SELECT 1 FROM paylink.transfer_reversals WHERE original_transfer_id=%s',(original,)).fetchone() is None
+
+def test_deferred_posting_checks_reject_missing_and_mismatched_legs(case):
+    u,_,_,a,b=case
+    sid=transfer(u,a,b,100)
+    with psycopg.connect(C['ADMIN_DATABASE_URL']) as c:
+        for query,args in (
+            ('DELETE FROM paylink.transfer_postings WHERE transfer_id=%s AND side=\'credit\'',(sid,)),
+            ("UPDATE paylink.transfer_postings SET delta_cents=101 WHERE transfer_id=%s AND side='credit'",(sid,)),
+            ('INSERT INTO paylink.transfers(initiated_by,source_account_id,destination_account_id,amount_cents,idempotency_key) VALUES(%s,%s,%s,100,%s)',(u,a,b,uuid4())),
+        ):
+            with pytest.raises(errors.CheckViolation,match='two matching postings'):
+                with c.transaction():
+                    c.execute(query,args)
+    with psycopg.connect(C['ADMIN_DATABASE_URL']) as c:
+        assert c.execute('SELECT count(*),sum(delta_cents) FROM paylink.transfer_postings WHERE transfer_id=%s',(sid,)).fetchone()==(2,0)

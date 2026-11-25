@@ -1,6 +1,34 @@
 from fastapi.testclient import TestClient
 from backend.app.main import app
 
+def test_workspace_bootstrap_matches_scoped_endpoints_and_validates_session(monkeypatch):
+    import backend.app.main as main
+    import json
+    main.attempts.clear()
+    monkeypatch.setenv('PUBLIC_DEMO_ENABLED', 'true')
+    with TestClient(app) as client:
+        assert client.get('/api/workspace').status_code == 401
+        for username in ('sai', 'siddhardth'):
+            assert client.post('/api/auth/demo', json={'username': username}).status_code == 200
+            response = client.get('/api/workspace', params={'time_zone': 'Pacific/Honolulu'})
+            assert response.status_code == 200
+            assert response.headers['cache-control'] == 'no-store'
+            data = response.json()
+            assert data['user'] == client.get('/api/me').json()
+            assert data['user']['username'] == username
+            assert data['accounts'] == client.get('/api/accounts').json()
+            assert data['transfers'] == client.get('/api/transfers').json()
+            assert data['invitations'] == client.get('/api/account-invitations').json()
+            assert data['insights'] == client.get('/api/insights', params={'time_zone': 'Pacific/Honolulu'}).json()
+            assert 'password_hash' not in json.dumps(data)
+            assert 'account_number' not in json.dumps(data)
+        assert client.get('/api/workspace', params={'time_zone': 'Unknown/Zone'}).status_code == 422
+        client.post('/api/auth/logout')
+        assert client.get('/api/workspace').status_code == 401
+        client.cookies.set('paylink_session', 'invalid-token')
+        assert client.get('/api/workspace').status_code == 401
+    main.attempts.clear()
+
 def test_quick_demo_signin_is_explicit_and_limited_to_two_profiles(monkeypatch):
     import backend.app.main as main
     main.attempts.clear()
@@ -39,6 +67,11 @@ def test_authentication_and_csrf():
         today=datetime.now(ZoneInfo('America/Chicago')).date()
         assert [d['day'] for d in client.get('/api/insights').json()['weekly']]==[
             (today-timedelta(days=i)).isoformat() for i in range(6,-1,-1)]
+        browser_today=datetime.now(ZoneInfo('Pacific/Honolulu')).date()
+        assert [d['day'] for d in client.get('/api/insights', params={'time_zone':'Pacific/Honolulu'}).json()['weekly']]==[
+            (browser_today-timedelta(days=i)).isoformat() for i in range(6,-1,-1)]
+        invalid_tz=client.get('/api/insights', params={'time_zone':'Unknown/Zone'})
+        assert invalid_tz.status_code==422
         import backend.app.main as main
         with main.pool.connection() as conn:
             assert conn.execute('SHOW TimeZone').fetchone()['TimeZone']=='America/Chicago'
@@ -103,6 +136,18 @@ def test_registered_workflow_authorization_insights_csv():
             monthly=c.get('/api/insights').json()['monthly']
             assert monthly['sent_cents']-before['sent_cents']==1234
             assert monthly['received_cents']==before['received_cents']
+            report=c.get('/api/insights/report',params={'days':7,'time_zone':'Pacific/Honolulu'})
+            assert report.status_code==200,report.text
+            report=report.json()
+            assert len(report['daily'])==7
+            assert report['summary']=={'sent_cents':1234,'received_cents':0,'transfer_count':1}
+            assert sum(day['sent_cents'] for day in report['daily'])==1234
+            assert report['counterparties'][0]['name']=='Recipient'
+            assert c.get('/api/insights/report',params={'days':90}).json()['period']['days']==90
+            assert c.get('/api/insights/report',params={'account_id':b}).json()['summary']['transfer_count']==0
+            assert c.get('/api/insights/report',params={'account_id':dest}).status_code==404
+            assert c.get('/api/insights/report',params={'days':8}).status_code==422
+            assert c.get('/api/insights/report',params={'time_zone':'Unknown/Zone'}).status_code==422
             assert monthly['transfer_count']-before['transfer_count']==2
             rows=c.get('/api/transfers').json()
             assert len(rows)==2 and {x['direction'] for x in rows}=={'sent','internal'}
@@ -110,8 +155,45 @@ def test_registered_workflow_authorization_insights_csv():
             assert len(export)==2 and all(x['memo']=="'=1+1" for x in export)
             assert c.post('/api/auth/logout').status_code==200
             assert c.post('/api/auth/login',json={'username':name+'@test.dev','password':'Test!workflow2026'}).status_code==200
+            owners=c.get(f'/api/accounts/{a}/holders')
+            assert owners.status_code==200
+            assert owners.json()[0]['username']==name
+            assert 'email' not in owners.json()[0]
+            assert d.get(f'/api/accounts/{a}/holders').status_code==404
+            invite=c.post(f'/api/accounts/{a}/invitations',json={'username':other})
+            assert invite.status_code==201,invite.text
+            invite_id=invite.json()['id']
+            invitation=d.get('/api/account-invitations').json()[0]
+            assert invitation['status']=='pending'
+            assert invitation['account_label']=='Checking'
+            assert invitation['inviter_username']==name
+            assert invitation['invitee_username']==other
+            path=f'/api/account-invitations/{invite_id}/decision'
+            assert c.post(path,json={'decision':'accepted'}).status_code==409
+            assert d.post(path,json={'decision':'accepted'}).json()['decision']=='accepted'
+            assert any(x['id']==a for x in d.get('/api/accounts').json())
+            original=r.json()['id']
+            path=f'/api/transfers/{original}/reversal'
+            reversal_body={'reason':'Duplicate payment','idempotency_key':str(uuid4())}
+            # a is joint now, but only the holder of the credited dest account may return it.
+            assert c.post(path,json=reversal_body).status_code==409
+            assert d.post(path,json={**reversal_body,'reason':'   '}).status_code==422
+            reversal=d.post(path,json=reversal_body)
+            assert reversal.status_code==201,reversal.text
+            assert d.post(path,json=reversal_body).json()==reversal.json()
+            detail=c.get(f'/api/transfers/{original}/detail').json()
+            assert detail['reversal']==reversal.json()
+            assert [p['delta_cents'] for p in detail['postings']]==[-1234,1234]
+            with psycopg.connect(C['ADMIN_DATABASE_URL']) as conn:
+                conn.execute("UPDATE paylink.transfers SET created_at=CURRENT_TIMESTAMP-interval '40 days' WHERE id=%s",(original,))
+            comparison=c.get('/api/insights/report',params={'days':30}).json()
+            assert comparison['summary']=={'sent_cents':0,'received_cents':1234,'transfer_count':1}
+            assert comparison['previous']=={'sent_cents':1234,'received_cents':0,'transfer_count':1}
     finally:
         with psycopg.connect(C['ADMIN_DATABASE_URL']) as conn:
+            conn.execute('DELETE FROM paylink.account_invitations WHERE inviter_id=ANY(%s::uuid[])',(ids,))
+            conn.execute('DELETE FROM paylink.transfer_reversals WHERE original_transfer_id IN (SELECT id FROM paylink.transfers WHERE initiated_by=ANY(%s::uuid[]))',(ids,))
+            conn.execute('DELETE FROM paylink.transfer_postings WHERE transfer_id IN (SELECT id FROM paylink.transfers WHERE initiated_by=ANY(%s::uuid[]))',(ids,))
             conn.execute('DELETE FROM paylink.transfers WHERE initiated_by=ANY(%s::uuid[])',(ids,))
             conn.execute('DELETE FROM paylink.account_holders WHERE user_id=ANY(%s::uuid[])',(ids,))
             conn.execute('DELETE FROM paylink.bank_accounts WHERE id=ANY(%s::uuid[])',(account_ids+starter_ids,))

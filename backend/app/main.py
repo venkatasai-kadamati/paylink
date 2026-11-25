@@ -8,16 +8,18 @@ import io
 import os
 import time
 from collections import defaultdict, deque
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException, Request, Response
+from fastapi import FastAPI, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from psycopg import errors
 from psycopg.rows import dict_row
+from . import paybot
 from psycopg_pool import ConnectionPool
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -102,6 +104,20 @@ class AccountCreate(BaseModel):
 
 class HolderCreate(BaseModel):
     username: str = Field(pattern=r'^[a-z][a-z0-9_]{2,29}$')
+
+class InvitationDecision(BaseModel):
+    decision: Literal['accepted','declined','cancelled']
+
+class ReversalCreate(BaseModel):
+    reason: str = Field(min_length=1, max_length=140)
+    idempotency_key: UUID
+
+    @field_validator('reason')
+    @classmethod
+    def nonblank_reason(cls, value):
+        if not value.strip():
+            raise ValueError('Enter a reason')
+        return value.strip()
 
 class TransferCreate(BaseModel):
     source_account_id: UUID
@@ -238,6 +254,16 @@ def add_holder(account_id: UUID, body: HolderCreate, user: User):
     except errors.RaiseException as e:
         raise HTTPException(409, e.diag.message_primary)
 
+@app.get('/api/accounts/{account_id}/holders')
+def account_owners(account_id:UUID,user:User):
+    with pool.connection() as c:
+        if not c.execute('SELECT 1 FROM paylink.account_holders WHERE account_id=%s AND user_id=%s',
+                         (account_id,user['id'])).fetchone():
+            raise HTTPException(404,'Account not found')
+        return c.execute('''SELECT u.full_name,u.username,h.joined_at FROM paylink.account_holders h
+          JOIN paylink.users u ON u.id=h.user_id WHERE h.account_id=%s ORDER BY h.joined_at,u.id''',
+                         (account_id,)).fetchall()
+
 @app.post('/api/transfers',status_code=201)
 def send(body:TransferCreate,user:User):
     try:
@@ -246,6 +272,49 @@ def send(body:TransferCreate,user:User):
                 (user['id'],body.source_account_id,body.destination_account_id,body.amount_cents,body.memo,body.idempotency_key)).fetchone()
     except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
     except errors.CheckViolation: raise HTTPException(409,'Transfer exceeds an account limit')
+
+@app.get('/api/account-invitations')
+def invitations(user:User):
+    with pool.connection() as c:
+        return c.execute('''SELECT i.*,a.label AS account_label,b.name AS bank_name,
+          sender.full_name AS inviter_name,sender.username AS inviter_username,
+          recipient.full_name AS invitee_name,recipient.username AS invitee_username
+          FROM paylink.list_account_invitations(%s) i
+          JOIN paylink.bank_accounts a ON a.id=i.account_id JOIN paylink.banks b ON b.id=a.bank_id
+          JOIN paylink.users sender ON sender.id=i.inviter_id
+          JOIN paylink.users recipient ON recipient.id=i.invitee_id''', (user['id'],)).fetchall()
+
+@app.post('/api/accounts/{account_id}/invitations',status_code=201)
+def invite(account_id:UUID,body:HolderCreate,user:User):
+    try:
+        with pool.connection() as c:
+            return c.execute('SELECT * FROM paylink.send_account_invitation(%s,%s,%s)',
+                             (user['id'],account_id,body.username)).fetchone()
+    except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
+
+@app.post('/api/account-invitations/{invitation_id}/decision')
+def decide_invitation(invitation_id:UUID,body:InvitationDecision,user:User):
+    try:
+        with pool.connection() as c:
+            return c.execute('SELECT * FROM paylink.decide_account_invitation(%s,%s,%s)',
+                             (user['id'],invitation_id,body.decision)).fetchone()
+    except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
+
+@app.post('/api/transfers/{transfer_id}/reversal',status_code=201)
+def reverse_transfer(transfer_id:UUID,body:ReversalCreate,user:User):
+    try:
+        with pool.connection() as c:
+            return c.execute('SELECT * FROM paylink.reverse_transfer(%s,%s,%s,%s)',
+                             (user['id'],transfer_id,body.reason,body.idempotency_key)).fetchone()
+    except errors.RaiseException as e: raise HTTPException(409,e.diag.message_primary)
+    except errors.CheckViolation: raise HTTPException(409,'Transfer exceeds an account limit')
+
+@app.get('/api/transfers/{transfer_id}/detail')
+def transfer_detail(transfer_id:UUID,user:User):
+    with pool.connection() as c:
+        row = c.execute('SELECT * FROM paylink.transfer_detail(%s,%s)', (user['id'],transfer_id)).fetchone()
+    if row is None: raise HTTPException(404,'Transfer not found')
+    return row
 
 HISTORY_SQL = '''WITH mine AS (SELECT account_id FROM paylink.account_holders WHERE user_id=%s),
  candidates AS (
@@ -268,9 +337,70 @@ HISTORY_SQL = '''WITH mine AS (SELECT account_id FROM paylink.account_holders WH
  JOIN paylink.bank_accounts s ON s.id=t.source_account_id
  JOIN paylink.bank_accounts d ON d.id=t.destination_account_id
  ORDER BY t.created_at DESC,t.id DESC LIMIT 200'''
+
+HISTORY_MINE = 'WITH mine AS (SELECT account_id FROM paylink.account_holders WHERE user_id=%s),'
+LOOKUP_SQL = HISTORY_MINE + '''
+ scoped AS (
+   SELECT t.*,
+          t.source_account_id IN(SELECT account_id FROM mine) AS outgoing,
+          t.destination_account_id IN(SELECT account_id FROM mine) AS incoming
+   FROM paylink.transfers t WHERE t.id=%s
+     AND (t.source_account_id IN(SELECT account_id FROM mine)
+          OR t.destination_account_id IN(SELECT account_id FROM mine)))
+ SELECT t.amount_cents,t.created_at,
+        CASE WHEN t.outgoing AND t.incoming THEN 'internal'
+             WHEN t.outgoing THEN 'sent' ELSE 'received' END AS direction,
+        COALESCE((SELECT u.full_name
+          FROM paylink.account_holders h JOIN paylink.users u ON u.id=h.user_id
+          WHERE h.account_id=CASE WHEN t.outgoing THEN t.destination_account_id ELSE t.source_account_id END
+          ORDER BY h.joined_at,u.id LIMIT 1),'Account') AS counterparty
+ FROM scoped t'''
+
+PERIOD_SQL = HISTORY_MINE + '''
+ relevant AS (
+   SELECT t.amount_cents,
+     t.source_account_id IN(SELECT account_id FROM mine) AS outgoing,
+     t.destination_account_id IN(SELECT account_id FROM mine) AS incoming
+   FROM paylink.transfers t WHERE t.created_at >= %s AND t.created_at <= %s
+     AND (t.source_account_id IN(SELECT account_id FROM mine)
+          OR t.destination_account_id IN(SELECT account_id FROM mine)))
+ SELECT coalesce(sum(amount_cents) FILTER(WHERE outgoing AND NOT incoming),0)::bigint AS sent,
+        coalesce(sum(amount_cents) FILTER(WHERE incoming AND NOT outgoing),0)::bigint AS received
+ FROM relevant'''
 @app.get('/api/transfers')
 def history(user:User):
     with pool.connection() as c: return c.execute(HISTORY_SQL,(user['id'],)).fetchall()
+
+@app.post('/api/paybot', dependencies=[Depends(rate_limit)])
+def ask_paybot(body: paybot.PayBotQuestion, user: User):
+    try:
+        tz = ZoneInfo(body.time_zone)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(422, 'Unrecognized time zone') from None
+    kind, value = paybot.understand(body.question)
+    if kind in paybot.GUIDES or (kind == 'lookup' and value is None):
+        return {'answer': paybot.LocalProvider().answer(body.question, 'lookup_help' if kind == 'lookup' else kind, None)}
+    with pool.connection() as conn:
+        conn.execute('SET TRANSACTION READ ONLY')
+        uid = user['id']
+        if kind == 'balances':
+            facts = paybot.balance_facts(conn.execute(ACCOUNT_SQL, (uid,)).fetchall(), value)
+        elif kind == 'lookup':
+            facts = [paybot.transfer_facts(row, tz) for row in conn.execute(LOOKUP_SQL, (uid, value)).fetchall()]
+        elif kind == 'period':
+            now = datetime.now(tz)
+            totals = conn.execute(PERIOD_SQL, (uid, paybot.period_start(now, value), now)).fetchone()
+            facts = {'period': value, 'sent': paybot.money(totals['sent']), 'received': paybot.money(totals['received'])}
+        else:
+            rows = conn.execute(HISTORY_SQL, (uid,)).fetchall()
+            facts = paybot.counterparty_facts(rows) if kind == 'counterparties' else [paybot.transfer_facts(row, tz) for row in rows[:5]]
+    engine = paybot.provider()
+    answer = engine.answer(body.question, kind, facts)
+    display = paybot.answer_display(kind, facts)
+    if display and answer != paybot.LocalProvider().answer(body.question, kind, facts):
+        display['summary'] = answer
+    return {'answer': answer, 'display': display,
+            'provider': 'bedrock' if getattr(engine, 'used_bedrock', False) else 'local'}
 
 @app.get('/api/activity.csv')
 def export(user:User):
@@ -286,9 +416,55 @@ def export(user:User):
     return StreamingResponse(iter([output.getvalue()]),media_type='text/csv',
         headers={'Content-Disposition':'attachment; filename="paylink-activity.csv"'})
 
-@app.get('/api/insights')
-def insights(user:User):
+SET_LOCAL_TIME_ZONE = "SELECT set_config('TimeZone', %s, true)"
+
+@app.get('/api/insights/report')
+def insight_report(user:User, days:Annotated[int,Query(ge=7,le=90)]=30, account_id:UUID|None=None,
+                   time_zone: Annotated[str | None, Query(min_length=1,max_length=100)] = None):
+    """Complete scoped cash-flow aggregates, independent of the history page limit."""
+    if days not in (7,30,90): raise HTTPException(422,'Choose 7, 30 or 90 days')
     with pool.connection() as c:
+        if time_zone is not None:
+            try: c.execute(SET_LOCAL_TIME_ZONE,(time_zone,))
+            except errors.InvalidParameterValue:
+                raise HTTPException(422,'Unrecognized time zone') from None
+        if account_id and not c.execute('SELECT 1 FROM paylink.account_holders WHERE user_id=%s AND account_id=%s',(user['id'],account_id)).fetchone():
+            raise HTTPException(404,'Account not found')
+        bounds=c.execute("SELECT current_date AS today, current_date-(%s-1) AS start",(days,)).fetchone()
+        scoped='''WITH mine AS (SELECT account_id FROM paylink.account_holders WHERE user_id=%s),
+          scoped AS MATERIALIZED (
+            SELECT t.amount_cents,t.created_at::date AS day,
+              CASE WHEN t.source_account_id IN (SELECT account_id FROM mine) THEN 'sent' ELSE 'received' END AS direction,
+              CASE WHEN t.source_account_id IN (SELECT account_id FROM mine) THEN t.destination_account_id ELSE t.source_account_id END AS other
+            FROM paylink.transfers t
+            WHERE t.created_at>=current_date-(%s*2-1) AND t.created_at<current_date+interval '1 day'
+            AND ((t.source_account_id IN (SELECT account_id FROM mine)) <> (t.destination_account_id IN (SELECT account_id FROM mine)))
+            AND (%s::uuid IS NULL OR t.source_account_id=%s OR t.destination_account_id=%s)) '''
+        params=(user['id'],days,account_id,account_id,account_id)
+        rows=c.execute(scoped+'''SELECT day,count(*) AS transfer_count,
+          coalesce(sum(amount_cents) FILTER(WHERE direction='sent'),0)::bigint AS sent_cents,
+          coalesce(sum(amount_cents) FILTER(WHERE direction='received'),0)::bigint AS received_cents
+          FROM scoped GROUP BY day ORDER BY day''',params).fetchall()
+        people=c.execute(scoped+'''SELECT a.label AS name,s.direction,count(*) AS transfer_count,
+          sum(s.amount_cents)::bigint AS amount_cents FROM scoped s JOIN paylink.bank_accounts a ON a.id=s.other
+          WHERE s.day>=current_date-(%s-1) GROUP BY a.id,a.label,s.direction ORDER BY amount_cents DESC,a.id LIMIT 6''',params+(days,)).fetchall()
+    by_day={row['day']:row for row in rows}
+    daily=[by_day.get(bounds['start']+timedelta(days=i),{'day':bounds['start']+timedelta(days=i),'transfer_count':0,'sent_cents':0,'received_cents':0}) for i in range(days)]
+    def totals(items):
+        items=list(items)
+        return {key:sum(int(r[key]) for r in items) for key in ('transfer_count','sent_cents','received_cents')}
+    return {'period':{'start':bounds['start'],'end':bounds['today'],'days':days},'daily':daily,
+            'summary':totals(daily),'previous':totals(r for r in rows if r['day']<bounds['start']),
+            'counterparties':people}
+
+@app.get('/api/insights')
+def insights(user:User, time_zone: Annotated[str | None, Query(min_length=1, max_length=100)] = None):
+    with pool.connection() as c:
+        if time_zone is not None:
+            try:
+                c.execute(SET_LOCAL_TIME_ZONE, (time_zone,))
+            except errors.InvalidParameterValue:
+                raise HTTPException(422, 'Unrecognized time zone') from None
         monthly=c.execute('''WITH mine AS(SELECT account_id FROM paylink.account_holders WHERE user_id=%s)
           SELECT count(*) AS transfer_count,
           coalesce(sum(amount_cents) FILTER(WHERE source_account_id IN(SELECT account_id FROM mine)
@@ -312,3 +488,15 @@ def insights(user:User):
           FROM days LEFT JOIN relevant t ON t.created_at>=days.day AND t.created_at<days.day+interval '1 day'
           GROUP BY days.day ORDER BY days.day''',(user['id'],)).fetchall()
     return {'monthly':monthly,'weekly':weekly}
+
+@app.get('/api/workspace')
+def workspace(user: User, time_zone: Annotated[str | None, Query(min_length=1, max_length=100)] = None):
+    # Bootstrap once, rather than /me followed by four authenticated requests.
+    # Reuse the existing user-scoped queries; no client balance/identity cache.
+    return {
+        'user': user,
+        'accounts': accounts(user),
+        'transfers': history(user),
+        'invitations': invitations(user),
+        'insights': insights(user, time_zone),
+    }
