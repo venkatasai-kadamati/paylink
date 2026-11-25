@@ -9,7 +9,9 @@ bank rows by name (and insert catalog rows only when missing).
 from __future__ import annotations
 
 import os
+from secrets import token_urlsafe
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
 from argon2 import PasswordHasher
@@ -22,35 +24,14 @@ admin = os.environ.get("ADMIN_DATABASE_URL")
 if not admin:
     raise SystemExit("ADMIN_DATABASE_URL is required")
 
-BANK_SPECS = [
-    ("Meridian Bank", "110000001"),
-    ("Northstar Credit Union", "110000002"),
-    ("Pacific Trust", "110000003"),
-]
-
-
-def bank_id(conn, name: str, routing: str):
-    row = conn.execute("SELECT id FROM paylink.banks WHERE name=%s", (name,)).fetchone()
-    if row:
-        return row[0]
-    # Prefer deterministic demo UUID when inserting fresh; fall back if PK clashes.
-    try:
-        conn.execute(
-            "INSERT INTO paylink.banks(id,routing_number,name) VALUES(%s,%s,%s)",
-            (uid(name), routing, name),
-        )
-        return uid(name)
-    except psycopg.errors.UniqueViolation:
-        conn.rollback()
-        row = conn.execute("SELECT id FROM paylink.banks WHERE name=%s OR routing_number=%s", (name, routing)).fetchone()
-        if not row:
-            raise
-        return row[0]
-
+with psycopg.connect(admin) as c:
+    c.execute((Path(__file__).resolve().parents[1] / "supabase" / "banks.sql").read_text())
+print("Synthetic bank catalog ready.")
+if os.environ.get("PUBLIC_DEMO_ENABLED", "false") != "true":
+    raise SystemExit(0)
 
 with psycopg.connect(admin) as c:
-    banks = {name: bank_id(c, name, route) for name, route in BANK_SPECS}
-    c.commit()
+    banks = dict(c.execute("SELECT name,id FROM paylink.banks").fetchall())
 
     for username, name, phone in [
         ("sai", "Sai Kadamati", "+15550101001"),
@@ -67,7 +48,7 @@ with psycopg.connect(admin) as c:
                 username + "@paylink.test",
                 phone,
                 name,
-                ph.hash("PaylinkDemo!2026"),
+                ph.hash(token_urlsafe(32)),
             ),
         )
 
@@ -123,4 +104,4 @@ with psycopg.connect(admin) as c:
         row = c.execute("SELECT username,full_name FROM paylink.users WHERE username=%s", (u,)).fetchone()
         print("ok", dict(row) if hasattr(row, "keys") else row)
 
-print("AWS demo profiles ready: sai / siddhardth (quick test + password PaylinkDemo!2026)")
+print("Synthetic demo profiles ready: sai / siddhardth.")

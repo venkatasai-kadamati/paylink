@@ -112,26 +112,14 @@ variable "public_demo_enabled" {
   default     = true
 }
 
-variable "enable_nat_gateway" {
-  description = "Create NAT Gateway in public AZ-A (required for private tasks to pull images / reach AWS APIs unless you add VPC endpoints)"
-  type        = bool
-  default     = true
-}
-
-variable "create_ecr_repositories" {
-  description = "Create ECR repos for frontend/backend images"
-  type        = bool
-  default     = true
-}
-
-variable "frontend_image_tag" {
-  description = "ECR image tag for frontend (push before or after apply; service will fail health checks until image exists)"
+variable "image_tag" {
+  description = "Release tag shared by both app images; the bootstrap image adds -bootstrap"
   type        = string
-  default     = "latest"
+  default     = "candidate"
 }
 
-variable "backend_image_tag" {
-  description = "ECR image tag for backend"
-  type        = string
-  default     = "latest"
+variable "enable_app_services" {
+  description = "Set false for the initial infrastructure apply; enable only after images and DB bootstrap are ready"
+  type        = bool
+  default     = false
 }

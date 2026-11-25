@@ -61,7 +61,7 @@ resource "aws_subnet" "public" {
 }
 
 resource "aws_eip" "nat" {
-  count  = var.enable_nat_gateway ? 1 : 0
+  count  = 1
   domain = "vpc"
 
   tags = {
@@ -72,7 +72,7 @@ resource "aws_eip" "nat" {
 }
 
 resource "aws_nat_gateway" "a" {
-  count = var.enable_nat_gateway ? 1 : 0
+  count = 1
 
   allocation_id = aws_eip.nat[0].id
   subnet_id     = aws_subnet.public[0].id
@@ -129,7 +129,7 @@ resource "aws_route_table" "app" {
 }
 
 resource "aws_route" "app_default_via_nat" {
-  count = var.enable_nat_gateway ? 2 : 0
+  count = 2
 
   route_table_id         = aws_route_table.app[count.index].id
   destination_cidr_block = "0.0.0.0/0"

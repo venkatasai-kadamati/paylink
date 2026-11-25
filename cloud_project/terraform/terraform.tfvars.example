@@ -17,8 +17,12 @@ backend_max_capacity   = 4
 
 # Cost knobs for class credits:
 db_instance_class = "db.t4g.micro"
-db_multi_az       = true   # set false for cheaper single-AZ lab (deviates from diagram)
-enable_nat_gateway = true  # ~$32/mo + data; required unless you add VPC endpoints
+db_multi_az       = true # set false for the cheaper lab (no RDS failover)
 log_retention_days = 7
 
 public_demo_enabled = true
+
+# Keep false for foundation staging, then set true after DB bootstrap succeeds.
+enable_app_services = false
+# Set a fresh Git commit tag for each release.
+image_tag = "candidate"

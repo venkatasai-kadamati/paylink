@@ -9,10 +9,10 @@ if [[ ! -f terraform.tfvars ]]; then
   exit 1
 fi
 
-terraform init -upgrade
-terraform fmt -check=false -recursive
+terraform fmt -check -recursive
 terraform validate
-terraform plan -out=tfplan
+umask 077
+terraform plan -input=false -lock=false -out=tfplan "$@"
 echo
 echo "Plan written to terraform/tfplan"
-echo "Review carefully. Apply ONLY when ready:  terraform apply tfplan"
+echo "Review carefully; obtain explicit approval and re-plan with locking before deployment."

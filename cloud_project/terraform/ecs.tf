@@ -13,7 +13,7 @@ resource "aws_ecs_cluster" "main" {
 
   setting {
     name  = "containerInsights"
-    value = "enabled"
+    value = "disabled"
   }
 
   tags = {
@@ -33,10 +33,6 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
   }
 }
 
-# APP_ORIGIN is updated after CloudFront exists via a second secret field pattern:
-# we inject the CloudFront domain into the task definition environment (non-secret).
-# JWT + DATABASE_URL come from Secrets Manager at task start.
-
 resource "aws_ecs_task_definition" "frontend" {
   family                   = "${var.project_name}-frontend"
   requires_compatibilities = ["FARGATE"]
@@ -46,7 +42,6 @@ resource "aws_ecs_task_definition" "frontend" {
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
-  # Native arm64 images from Apple Silicon / Colima builds
   runtime_platform {
     operating_system_family = "LINUX"
     cpu_architecture        = "ARM64"
@@ -67,9 +62,6 @@ resource "aws_ecs_task_definition" "frontend" {
       environment = [
         { name = "PORT", value = "3000" },
         { name = "HOSTNAME", value = "0.0.0.0" },
-        # ALB path-routes /api/* to backend; rewrite unused but keep a safe default
-        { name = "BACKEND_URL", value = "http://127.0.0.1:8000" },
-        { name = "NEXT_PUBLIC_DEMO_ENABLED", value = var.public_demo_enabled ? "true" : "false" }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -141,7 +133,7 @@ resource "aws_ecs_service" "frontend" {
   name            = "${var.project_name}-frontend"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.frontend.arn
-  desired_count   = var.frontend_desired_count
+  desired_count   = var.enable_app_services ? var.frontend_desired_count : 0
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -159,18 +151,14 @@ resource "aws_ecs_service" "frontend" {
   deployment_minimum_healthy_percent = 50
   deployment_maximum_percent         = 200
 
-  depends_on = [aws_lb_listener.http]
-
-  lifecycle {
-    ignore_changes = [desired_count]
-  }
+  depends_on = [aws_lb_listener.http, aws_iam_role_policy_attachment.ecs_execution_managed]
 }
 
 resource "aws_ecs_service" "backend" {
   name            = "${var.project_name}-backend"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.backend.arn
-  desired_count   = var.backend_desired_count
+  desired_count   = var.enable_app_services ? var.backend_desired_count : 0
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -191,14 +179,14 @@ resource "aws_ecs_service" "backend" {
   depends_on = [
     aws_lb_listener_rule.api,
     aws_secretsmanager_secret_version.app,
+    aws_iam_role_policy_attachment.ecs_execution_managed,
+    aws_iam_role_policy.ecs_execution_secrets,
   ]
-
-  lifecycle {
-    ignore_changes = [desired_count]
-  }
 }
 
 resource "aws_appautoscaling_target" "backend" {
+  count = var.enable_app_services ? 1 : 0
+
   max_capacity       = var.backend_max_capacity
   min_capacity       = var.backend_min_capacity
   resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.backend.name}"
@@ -207,11 +195,13 @@ resource "aws_appautoscaling_target" "backend" {
 }
 
 resource "aws_appautoscaling_policy" "backend_cpu" {
+  count = var.enable_app_services ? 1 : 0
+
   name               = "${var.project_name}-backend-cpu"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.backend.resource_id
-  scalable_dimension = aws_appautoscaling_target.backend.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.backend.service_namespace
+  resource_id        = aws_appautoscaling_target.backend[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.backend[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.backend[0].service_namespace
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {

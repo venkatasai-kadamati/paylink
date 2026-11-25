@@ -1,6 +1,6 @@
 # Experiments
 
-Capture CloudWatch screenshots and short notes after each lab.
+Only run these experiments on the authorized disposable AWS stack. Load generation, deliberate failover, task stops, threshold changes and teardown require explicit approval. Capture CloudWatch screenshots and short notes after each lab; the examples assume the presentation profile.
 
 ## A. Baseline
 
@@ -27,7 +27,7 @@ Capture CloudWatch screenshots and short notes after each lab.
 
 **AZ model (do not disable an AZ in a shared student account unless staff approve)**
 
-- Losing AZ-A still leaves app subnet B + RDS Multi-AZ failover (AWS-managed).
+- Losing AZ-A leaves app subnet B and RDS Multi-AZ failover (AWS-managed), but also loses the single NAT egress path; do not claim that new tasks can start or fail over end-to-end without testing.
 
 **RDS Multi-AZ (optional, disruptive)**
 
@@ -51,4 +51,4 @@ Capture CloudWatch screenshots and short notes after each lab.
 
 1. Cost Explorer → tag `Project=paylink` for the lab window.
 2. Rank: NAT, RDS, ALB, ECS, CloudFront.
-3. Destroy; confirm charges flatten.
+3. Follow the [approved teardown](DEPLOYMENT_GUIDE.md#4-tear-down-after-separate-confirmation); confirm usage declines after the billing delay.
