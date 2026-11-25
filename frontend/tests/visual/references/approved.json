@@ -3,7 +3,7 @@
   "approval": {
     "method": "explicit_owner_merge_of_this_reference_lock_PR_into_main",
     "owner": "Venkatasai Kadamati (venkatasai-kadamati)",
-    "proposal_pull_request": null,
+    "proposal_pull_request": "https://github.com/venkatasai-kadamati/paylink/pull/8",
     "condition": "Merging this separate reference-lock PR into main is Venkatasai's approval of the current look as the visual reference. Until he merges it, these files remain an unapproved proposal.",
     "scope": "Current-look reference only; not overall design approval, a new review cycle, a rescore, accessibility certification or production readiness.",
     "record": "The owner merge event on GitHub is the acceptance record; there is no pre-merge approval timestamp.",
