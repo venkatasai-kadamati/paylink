@@ -55,6 +55,7 @@ def generate(c, scale=1, reset=False, namespace='benchmark', as_of='2026-11-22')
     if reset:
         c.execute('CREATE TEMP TABLE syn_delete ON COMMIT DROP AS SELECT id FROM paylink.users WHERE starts_with(username,%s) AND email LIKE %s',
                   (prefix, '%@synthetic.paylink.test'))
+        c.execute('DELETE FROM paylink.transfer_postings WHERE transfer_id IN (SELECT id FROM paylink.transfers WHERE initiated_by IN (SELECT id FROM syn_delete))')
         c.execute('DELETE FROM paylink.transfers WHERE initiated_by IN (SELECT id FROM syn_delete)')
         c.execute('DELETE FROM paylink.account_holders WHERE user_id IN (SELECT id FROM syn_delete)')
         c.execute('DELETE FROM paylink.bank_accounts WHERE bank_id IN (SELECT id FROM paylink.banks WHERE starts_with(name,%s))', (prefix,))
@@ -89,13 +90,19 @@ def generate(c, scale=1, reset=False, namespace='benchmark', as_of='2026-11-22')
     with c.cursor().copy('COPY syn_transfer_ids FROM STDIN') as cp:
         for i in range(1, count+1):
             cp.write_row((i, identity('transfer', i, namespace), identity('key', i, namespace)))
-    c.execute('''INSERT INTO paylink.transfers(id,initiated_by,source_account_id,destination_account_id,amount_cents,memo,idempotency_key,created_at)
+    c.execute('''WITH recorded AS (
+      INSERT INTO paylink.transfers(id,initiated_by,source_account_id,destination_account_id,amount_cents,memo,idempotency_key,created_at)
       SELECT t.id,s.owner_id,s.id,d.id,100+(g*7919%%100000),%s,
       t.key,%s::timestamptz - ((g*104729%%31536000)*interval '1 second')
       FROM syn_transfer_ids t
       JOIN syn_accounts s ON s.i=CASE WHEN g%%5=0 THEN (g/5)%%greatest(1,%s/100) ELSE (g::bigint*7919)%%%s END
       JOIN syn_accounts d ON d.i=(s.i+1+(g::bigint*31)%%(%s-1))%%%s
-      ORDER BY (g*104729%%31536000) DESC,g''',
+      ORDER BY (g*104729%%31536000) DESC,g
+      RETURNING id,source_account_id,destination_account_id,amount_cents
+      ) INSERT INTO paylink.transfer_postings(transfer_id,side,account_id,delta_cents)
+      SELECT r.id,p.side,p.account_id,p.delta_cents FROM recorded r
+      CROSS JOIN LATERAL (VALUES ('debit',r.source_account_id,-r.amount_cents),
+                                 ('credit',r.destination_account_id,r.amount_cents)) p(side,account_id,delta_cents)''',
       (prefix+'transfer', anchor, n*2, n*2, n*2, n*2))
     c.execute('''WITH outgoing AS(SELECT source_account_id id,sum(amount_cents) amount FROM paylink.transfers
       WHERE initiated_by IN(SELECT id FROM syn_users) GROUP BY 1),

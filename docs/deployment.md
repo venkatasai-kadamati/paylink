@@ -15,7 +15,7 @@ The initial hosted application commit is e20a095; 0fec3a6 adds reproducible host
 
 ## Security and connection configuration
 
-The schema is private `paylink`, containing exactly users, banks, bank_accounts, account_holders, and transfers. It is not exposed through the Supabase Data API. All five tables enable RLS. FastAPI uses a dedicated `paylink_api` login with SELECT, user registration INSERT, and execution of the three controlled functions. It has no direct balance UPDATE, ownership INSERT, or transfer INSERT privileges. The actor UUID is derived from the verified backend session; the role is a trusted service identity and must never be exposed to clients.
+The private `paylink` schema has [eight domain tables](database-design.md), all with RLS enabled. It is not exposed through the Supabase Data API. The dedicated `paylink_api` login retains SELECT on the original five tables and user registration INSERT; it has no direct grants on invitations, postings, or reversals. Those use controlled routines. The actor UUID comes from the verified backend session; this service identity must never be exposed to clients.
 
 The Mac cannot resolve/use this project's direct IPv6 database endpoint, so the verified connection uses the dashboard-provided IPv4 session pooler at aws-0-us-east-2.pooler.supabase.com:5432. The pooler username is paylink_api.wktoypofpksgbjwtadrn. Passwords are generated privately. Connections use `sslmode=verify-full` and the official public CA in backend/certs/supabase-ca.crt. The certificate's upstream link is recorded beside it. Do not replace verification with `sslmode=require` to hide a trust failure.
 
@@ -39,6 +39,6 @@ For future code changes, push reviewed source to main and inspect Render/Vercel 
 
 See validation.md, hosted-browser-results.json, hosted-database-evidence.json, hosted-advisors.json, and the actual Supabase screenshot. Security advisors returned no findings; informational unused indexes on the small dataset are not grounds to remove the history indexes without workload evidence.
 
-Render's free service can sleep. Warm the public app and API health, then sign in before recording. Backup/restore, crash recovery, sustained hosted load, a distributed limiter, invitation acceptance/revocation, and an immutable ledger remain future work. No real banks or funds are connected.
+Render's free service can sleep. Warm the public app and API health, then sign in before recording. Backup/restore, crash recovery, sustained hosted load, a distributed limiter, ownership revocation, and a tamper-proof ledger remain future work. The workspace uses the invitation, transfer detail, and reversal endpoints for joint-account requests and transfer returns. No real banks or funds are connected.
 
 The starting_balance_200 migration changes only defaults; existing account balances are preserved. Application revision eed5ec1 introduces automatic $200 checking-account creation during registration and the refined interface.

@@ -7,6 +7,7 @@ from psycopg.rows import dict_row
 from dotenv import dotenv_values
 ROOT=Path(__file__).resolve().parents[1]
 cfg=dotenv_values(ROOT/'.env.hosted')
+new_tables=('account_invitations','transfer_postings','transfer_reversals')
 with psycopg.connect(cfg['DATABASE_URL'],row_factory=dict_row) as c:
  c.execute('SET TRANSACTION READ ONLY')
  evidence={'timestamp_utc':datetime.now(timezone.utc).isoformat(),'project_ref':'wktoypofpksgbjwtadrn',
@@ -20,12 +21,16 @@ with psycopg.connect(cfg['DATABASE_URL'],row_factory=dict_row) as c:
   'transfers':c.execute('SELECT id,source_account_id,destination_account_id,amount_cents,memo FROM paylink.transfers ORDER BY created_at').fetchall()}
  evidence['privileges']=[{'table':t,'direct_insert':c.execute('SELECT has_table_privilege(current_user,%s,%s) AS value',('paylink.'+t,'INSERT')).fetchone()['value'],
  'direct_update':c.execute('SELECT has_table_privilege(current_user,%s,%s) AS value',('paylink.'+t,'UPDATE')).fetchone()['value']} for t in ('bank_accounts','account_holders','transfers')]
+ evidence['restricted_tables']={t:c.execute('SELECT has_table_privilege(current_user,%s,%s) AS value',
+     ('paylink.'+t,'SELECT,INSERT,UPDATE,DELETE')).fetchone()['value'] for t in new_tables}
  evidence['reconciliation']=c.execute('''WITH delta AS(SELECT source_account_id AS id,-amount_cents AS n FROM paylink.transfers
  UNION ALL SELECT destination_account_id,amount_cents FROM paylink.transfers)
  SELECT a.id FROM paylink.bank_accounts a LEFT JOIN delta d ON d.id=a.id GROUP BY a.id
  HAVING a.balance_cents<>a.opening_balance_cents+coalesce(sum(d.n),0)''').fetchall()
- assert len(evidence['tables'])==5 and all(t['rowsecurity'] for t in evidence['tables'])
+ assert {t['tablename'] for t in evidence['tables']}=={'users','banks','bank_accounts','account_holders','transfers'} | set(new_tables)
+ assert all(t['rowsecurity'] for t in evidence['tables'])
  assert not evidence['reconciliation'] and evidence['client_tls']['in_use']
  assert not any(p['direct_insert'] or p['direct_update'] for p in evidence['privileges'])
+ assert not any(evidence['restricted_tables'].values())
 (ROOT/'artifacts/hosted-database-evidence.json').write_text(json.dumps(evidence,default=str,indent=2)+'\n')
-print('Hosted evidence saved: five RLS tables, verified TLS, restricted role and zero reconciliation discrepancies.')
+print('Hosted evidence saved: eight RLS tables, TLS in use, restricted role and zero reconciliation discrepancies.')

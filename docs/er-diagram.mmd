@@ -5,6 +5,13 @@ erDiagram
  USERS ||--o{ TRANSFERS : initiates
  BANK_ACCOUNTS ||--o{ TRANSFERS : sends_from
  BANK_ACCOUNTS ||--o{ TRANSFERS : receives_into
+ BANK_ACCOUNTS ||--o{ ACCOUNT_INVITATIONS : offered_for
+ USERS ||--o{ ACCOUNT_INVITATIONS : invites
+ USERS ||--o{ ACCOUNT_INVITATIONS : invited
+ TRANSFERS ||--|{ TRANSFER_POSTINGS : posts_two_legs
+ BANK_ACCOUNTS ||--o{ TRANSFER_POSTINGS : journaled_in
+ TRANSFERS ||--o| TRANSFER_REVERSALS : original
+ TRANSFERS ||--o| TRANSFER_REVERSALS : compensation
  USERS {
   uuid id PK
   text username UK
@@ -44,4 +51,25 @@ erDiagram
   text memo
   uuid idempotency_key
   timestamptz created_at
+ }
+ ACCOUNT_INVITATIONS {
+  uuid id PK
+  uuid account_id FK
+  uuid inviter_id FK
+  uuid invitee_id FK
+  timestamptz created_at
+  timestamptz expires_at
+  text decision "optional"
+  timestamptz decided_at "optional"
+ }
+ TRANSFER_POSTINGS {
+  uuid transfer_id PK,FK
+  text side PK
+  uuid account_id FK "unique with transfer_id"
+  bigint delta_cents
+ }
+ TRANSFER_REVERSALS {
+  uuid original_transfer_id PK,FK
+  uuid reversing_transfer_id UK,FK
+  text reason
  }

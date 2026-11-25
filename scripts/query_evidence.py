@@ -19,8 +19,15 @@ with psycopg.connect(C['ADMIN_DATABASE_URL']) as c:
     u=c.execute('SELECT user_id FROM paylink.account_holders WHERE account_id=%s LIMIT 1',(a[0],)).fetchone()[0]
     benchmark='''SELECT id,amount_cents,created_at FROM paylink.transfers WHERE source_account_id=%s ORDER BY created_at DESC,id DESC LIMIT 20'''
     c.execute('SAVEPOINT benchmark')
-    c.execute('''INSERT INTO paylink.transfers(initiated_by,source_account_id,destination_account_id,amount_cents,memo,idempotency_key,created_at)
-      SELECT %s,%s,%s,100,'rolled-back plan fixture',gen_random_uuid(),now()-g*interval '1 minute' FROM generate_series(1,20000) g''',(u,a[0],b[0]))
+    c.execute('''WITH recorded AS (
+      INSERT INTO paylink.transfers(initiated_by,source_account_id,destination_account_id,amount_cents,memo,idempotency_key,created_at)
+      SELECT %s,%s,%s,100,'rolled-back plan fixture',gen_random_uuid(),now()-g*interval '1 minute' FROM generate_series(1,20000) g
+      RETURNING id,source_account_id,destination_account_id,amount_cents
+      ) INSERT INTO paylink.transfer_postings(transfer_id,side,account_id,delta_cents)
+      SELECT r.id,p.side,p.account_id,p.delta_cents FROM recorded r
+      CROSS JOIN LATERAL (VALUES ('debit',r.source_account_id,-r.amount_cents),
+                                 ('credit',r.destination_account_id,r.amount_cents)) p(side,account_id,delta_cents)''',(u,a[0],b[0]))
+    c.execute('SET CONSTRAINTS ALL IMMEDIATE')
     c.execute('ANALYZE paylink.transfers')
     evidence+=['20,000 synthetic transfer rows, transaction-only; not financial history.','WITH composite source/time index:']
     evidence += [r[0] for r in c.execute('EXPLAIN (ANALYZE,BUFFERS) '+benchmark,(a[0],)).fetchall()]
