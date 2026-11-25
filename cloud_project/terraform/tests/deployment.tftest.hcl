@@ -28,6 +28,15 @@ run "foundation_before_bootstrap" {
     condition     = [for s in local.bootstrap_secrets : s.name] == ["ADMIN_DATABASE_URL", "DATABASE_URL"]
     error_message = "The one-off task must inject owner and restricted DB credentials as secrets."
   }
+
+  assert {
+    condition = (
+      aws_cloudfront_distribution.app.viewer_certificate[0].cloudfront_default_certificate &&
+      aws_cloudfront_distribution.app.viewer_certificate[0].minimum_protocol_version == null &&
+      aws_cloudfront_distribution.app.default_cache_behavior[0].viewer_protocol_policy == "redirect-to-https"
+    )
+    error_message = "Defer the TLS policy to the managed CloudFront certificate and redirect HTTP viewers to HTTPS."
+  }
 }
 
 run "presentation_profile" {
