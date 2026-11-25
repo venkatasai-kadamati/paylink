@@ -58,6 +58,9 @@ jobs:
       - run: python scripts/check_design_skills.py
       - run: npm run typecheck --prefix frontend
       - run: npm run build --prefix frontend
+        env:
+          # Match the demo-enabled sign-in in the accepted visual references.
+          NEXT_PUBLIC_DEMO_ENABLED: 'true'
       - name: Compare approved real-component renders
         shell: bash
         run: |
