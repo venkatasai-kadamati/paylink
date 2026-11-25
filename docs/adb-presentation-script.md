@@ -199,7 +199,13 @@ Let’s switch to the live browser and show it running.
 
 ---
 
-### Slide 14 — Live Application Demo *(~2:30)*
+### Slide 14 — Architecture Request Diagram (Full Slide) *(~0:30)*
+**Siddhardth:**  
+Here’s the visual trace of that exact `POST /api/transfers` call across all three tiers — Vercel Next.js on the left, Render FastAPI in the middle, and Supabase PostgreSQL executing `paylink.execute_transfer()` on the right.
+
+---
+
+### Slide 15 — Live Demo *(~2:30)*
 *(Siddhardth shares/switches to `https://paylink-radiant690s-projects.vercel.app/` and drives; Sai narrates the database behavior behind each screen. Keep live demo read-only unless Professor asks to submit a transfer.)*
 
 **Siddhardth:**  
@@ -227,7 +233,7 @@ Let’s jump back to our last slide to wrap up.
 
 ---
 
-### Slide 15 — Challenges, Honest Scope & Q&A *(~1:10)*
+### Slide 16 — Challenges, Fixes & Honest Scope *(~1:10)*
 **Siddhardth:**  
 To close out, we hit four real database engineering challenges along the way. On my side, two big ones were **B-tree plan hijacking** — where a global `created_at` B-tree broke `HISTORY_SQL` until we switched to 32 KB BRIN plus `LATERAL` — and **foreign-key lock contention**, where `FOR UPDATE` on `users` blocked concurrent transfers until we downgraded it to `FOR NO KEY UPDATE`.
 
@@ -240,7 +246,13 @@ On the right, we’re keeping our limitations completely transparent:
 - PayBot returns deterministic local answers because our AWS Bedrock quota is zero.
 - And point-in-time backup restore and production-scale load drills were outside our test scope.
 
-Thank you so much — we’d love to take any questions!
+Thank you so much — let’s move to our closing slide!
+
+---
+
+### Slide 17 — Any Questions? / Thank You *(Q&A)*
+**Sai & Siddhardth:**  
+Thank you Professor and everyone — we’d love to take any questions!
 
 ---
 
