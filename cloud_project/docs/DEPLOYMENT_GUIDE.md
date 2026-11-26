@@ -1,6 +1,8 @@
 # PayLink on AWS: deployment runbook
 
-**Approval required.** Do not apply, push to ECR, run AWS tasks, or destroy until Venkatasai explicitly authorizes the class account, an isolated synthetic RDS database, the profile/budget, and the demo window. No Supabase credentials or data are needed; this does not migrate, replace, or write to the existing Supabase-backed app. Plan for about **$116/month** continuously at presentation capacity, or **$88/month** for the single-copy rehearsal profile; see [cost assumptions](COST_NOTES.md). Shut down the disposable stack as soon as approved testing is complete.
+**Approval required.** Do not apply, push to ECR, run AWS tasks, or destroy without explicit authorization for the exact action and class account. The application uses only the isolated Amazon RDS PostgreSQL database and synthetic fixtures. Plan for about **$116/month** at presentation capacity or **$88/month** for the single-copy profile; see [cost assumptions](COST_NOTES.md). Leave the live stack running until teardown is separately approved.
+
+For the full AWS service inventory and an overview, see the [AWS guide](AWS_GUIDE.md).
 
 ## Requirements and scope
 
@@ -49,14 +51,16 @@ Local containers (native architecture): after local `./scripts/install.sh`, inst
 
 ```bash
 docker build --build-arg NEXT_PUBLIC_DEMO_ENABLED=true -f cloud_project/docker/frontend.Dockerfile -t paylink-cloud-smoke-frontend .
-docker build -f backend/Dockerfile -t paylink-cloud-smoke-backend .
+docker build --target app -f backend/Dockerfile -t paylink-cloud-smoke-backend .
 docker build -f cloud_project/docker/migrate.Dockerfile -t paylink-cloud-smoke-bootstrap .
 ./cloud_project/scripts/smoke_test.sh
 ```
 
 ## 2. After explicit approval: provision state and foundation
 
-Keep the state-root working directory/state private and persistent. Keep plans out of Git and delete the local plan artifacts as soon as no longer needed; application state and plan files can contain credentials despite redacted CLI output. Reuse the authorized **dedicated** bucket/key if already provisioned for this run.
+**Existing deployment:** The application uses the versioned, encrypted S3 backend in `us-east-1` at `paylink/terraform.tfstate`, with a native S3 lockfile. Reconnect with the existing bucket and key; do not run the bucket-creation or foundation steps again. With authorized read-only credentials, use `aws s3api head-object` for that bucket and key to confirm it exists without downloading state, and `terraform state list` from the initialized application root to confirm it has the expected resources. If either check fails, stop; do not initialize or apply against a replacement key. No state migration is needed to reconnect.
+
+**New deployment only:** Keep the bucket-bootstrap root's local state private and persistent, backed up in an encrypted location outside Git. It tracks only the bucket and its controls, not the application. It must not use the bucket it creates and later removes as its own backend. If an independent, retained administrative state bucket is provided, migrate only this root with `terraform init -migrate-state` to a distinct encrypted, locked key after verifying ownership and backing up the local state. Keep application state and plans out of Git; they can contain credentials despite redacted CLI output.
 
 ```bash
 umask 077
@@ -76,8 +80,7 @@ Allow up to 15 minutes for newly enabled S3 versioning to propagate before the f
 
 ```bash
 terraform -chdir="$APP" init -reconfigure -input=false \
-  -backend-config="bucket=$BUCKET" -backend-config=key=paylink/terraform.tfstate \
-  -backend-config="region=$AWS_REGION" -backend-config=encrypt=true -backend-config=use_lockfile=true
+  -backend-config="bucket=$BUCKET" -backend-config="region=$AWS_REGION"
 cp "$APP/terraform.tfvars.example" "$APP/terraform.tfvars"
 ```
 
@@ -117,7 +120,7 @@ URL=$(terraform -chdir="$APP" output -raw cloudfront_url)
 curl --fail --show-error --silent "$URL/api/health"
 ```
 
-Check that both target groups have the expected healthy replicas and that health reports `{"status":"ok","database":"connected","simulation":true}`. At the CloudFront URL, verify anonymous access, Sai/Siddhardth sign-in, a session reload, a small **synthetic** transfer and matching balance/history/receipt, insights, and sign-out; no writes to hosted Supabase. The browser uses one origin and secure cookies. Capture captioned, redacted service/network/screens for the report, and record observed metrics and recovery times using the [experiment guide](EXPERIMENTS.md). Load generation, killing a task and RDS failover are separate test actions that must be explicitly authorized before running. The historic screenshots are not proof of this run.
+Check that both target groups have the expected healthy replicas and that health reports `{"status":"ok","database":"connected","simulation":true}`. At the CloudFront URL, verify anonymous access, Sai/Siddhardth sign-in, a session reload, a small **synthetic** transfer and matching balance/history/receipt, insights, and sign-out. The browser uses one origin and secure cookies; all demo writes go to the isolated RDS database. Capture captioned, redacted service/network/screens for the report, and record observed metrics and recovery times using the [experiment guide](EXPERIMENTS.md). Load generation, killing a task and RDS failover are separate test actions that must be explicitly authorized before running. The historic screenshots are not proof of this run.
 
 If a target is unhealthy, inspect ECS events, bootstrap/application CloudWatch logs and the ALB target reason; don't print credentials. If the fresh rollout must be stopped, apply a reviewed plan with `enable_app_services = false`. Terraform reconciles the baseline desired count on later applies, so wait for scale-in before unrelated applies or explicitly review any count reset. For a later release rollback, reselect a retained, known-good image tag and plan; a container rollback does not roll back SQL migrations.
 

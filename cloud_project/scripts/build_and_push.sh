@@ -21,7 +21,7 @@ aws ecr get-login-password --region "$REGION" \
 docker buildx build --platform linux/arm64 --push \
   --build-arg "NEXT_PUBLIC_DEMO_ENABLED=$DEMO" \
   -f "$ROOT/cloud_project/docker/frontend.Dockerfile" -t "$FRONTEND_REPO:$TAG" "$ROOT"
-docker buildx build --platform linux/arm64 --push \
+docker buildx build --platform linux/arm64 --push --target app \
   -f "$ROOT/backend/Dockerfile" -t "$BACKEND_REPO:$TAG" "$ROOT"
 docker buildx build --platform linux/arm64 --push \
   -f "$ROOT/cloud_project/docker/migrate.Dockerfile" -t "$BACKEND_REPO:$TAG-bootstrap" "$ROOT"

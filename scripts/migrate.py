@@ -6,6 +6,9 @@ from dotenv import dotenv_values
 import psycopg
 from psycopg import sql
 ROOT=Path(__file__).resolve().parents[1]
+migrations=sorted((ROOT/'database/migrations').glob('*.sql'))
+if not migrations:
+    raise SystemExit('No PostgreSQL migrations found.')
 config={**dotenv_values(ROOT/'.env'), **{k:v for k,v in os.environ.items() if k in ('ADMIN_DATABASE_URL','DATABASE_URL')}}
 api=urlparse(config['DATABASE_URL'])
 if unquote(api.username or '').split('.')[0]!='paylink_api':
@@ -14,7 +17,7 @@ with psycopg.connect(config['ADMIN_DATABASE_URL']) as c:
     c.execute('CREATE SCHEMA IF NOT EXISTS paylink_meta')
     c.execute('CREATE TABLE IF NOT EXISTS paylink_meta.migrations(name text PRIMARY KEY, applied_at timestamptz DEFAULT now())')
     c.execute('SELECT pg_advisory_xact_lock(56005600)')
-    for path in sorted((ROOT/'supabase/migrations').glob('*.sql')):
+    for path in migrations:
         if c.execute('SELECT 1 FROM paylink_meta.migrations WHERE name=%s',(path.name,)).fetchone(): continue
         # Strip migration transaction wrappers; outer connection commits the version marker atomically.
         text=path.read_text().replace('BEGIN;\n','',1).removesuffix('COMMIT;\n')

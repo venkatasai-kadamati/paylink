@@ -6,7 +6,7 @@
 
 **Sai:** “Think about the last time you split lunch with somebody. The button says ‘Send,’ but behind it the application has to do three things correctly: check that it’s really you, move the right amount, and record what happened so both people see the same result. That’s what we built with PayLink. It’s a simulation, so the money and banks are fictional.”
 
-“You can open an account, send a payment, or invite someone to share an account. The activity screen lets you see the receipt and export your history. If somebody sends you the wrong amount, you can return it without losing the original record. We’ll show you that flow in the live app.”
+“You can open an account, send a payment, or invite someone to share an account. The activity screen lets you see the receipt and export your history. If somebody sends you the wrong amount, you can return it without losing the original record. We’ll show you that flow live. It runs on 12 AWS services, with one application database: Amazon RDS PostgreSQL.”
 
 “Siddhardth, what actually changes when I press Send?”
 
@@ -26,7 +26,7 @@
 
 “That NAT box lets the private app tasks make outbound connections. The browser comes in through CloudFront, not through the NAT gateway.”
 
-“We kept Next.js in a container because it runs as a server here. An S3 bucket could serve static files, but it wouldn’t run that server. Our S3 bucket is for Terraform state, not the frontend.”
+“Next.js runs as a server in a container. We use S3 for a different job: it stores Terraform’s record of the AWS resources. That record is encrypted and versioned, and a lockfile keeps two people from changing it at the same time.”
 
 ## Slide 9 · 4:15–5:15 · Siddhardth
 

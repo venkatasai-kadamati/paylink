@@ -3,7 +3,7 @@
 Unlike scripts/seed.py, this is intentionally allowed against the private RDS used by
 the cloud_project stack. Simulated funds only.
 
-Banks may already exist from supabase/banks.sql with different UUIDs — always resolve
+Banks may already exist with different UUIDs — always resolve
 bank rows by name (and insert catalog rows only when missing).
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ if not admin:
     raise SystemExit("ADMIN_DATABASE_URL is required")
 
 with psycopg.connect(admin) as c:
-    c.execute((Path(__file__).resolve().parents[1] / "supabase" / "banks.sql").read_text())
+    c.execute((Path(__file__).resolve().parents[1] / "database" / "banks.sql").read_text())
 print("Synthetic bank catalog ready.")
 if os.environ.get("PUBLIC_DEMO_ENABLED", "false") != "true":
     raise SystemExit(0)

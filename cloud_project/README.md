@@ -2,7 +2,7 @@
 
 Infrastructure-as-Code deployment of PayLink (Next.js + FastAPI + PostgreSQL) on AWS, matching the course service and network diagrams.
 
-This disposable class stack is separate from the existing Supabase deployment and uses only synthetic data. **Do not provision, deploy, run AWS tests, or tear down without Venkatasai's explicit approval.** See [estimated costs](docs/COST_NOTES.md).
+This isolated class stack uses Amazon RDS PostgreSQL for all application data and Amazon S3 for remote application Terraform state. **Do not provision, deploy, run AWS tests, or tear down without Venkatasai's explicit approval.** See the [AWS guide and service inventory](docs/AWS_GUIDE.md) and [estimated costs](docs/COST_NOTES.md).
 
 ## Architecture
 
