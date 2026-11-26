@@ -132,20 +132,10 @@ Path: `../artifacts/screenshots/03-adhoc-working-proof/`
 
 ---
 
-## After re-apply
+## Reproducing this evidence
 
-Quick-test buttons need DB rows. After apply + image push:
-
-```bash
-./cloud_project/scripts/bootstrap_aws_data.sh
-```
-
-Without that, `/api/auth/demo` returns 503.
-
-Talking points: [PROFESSOR_QA.md](PROFESSOR_QA.md).
+These are historic artifacts. Once Venkatasai authorizes a fresh AWS run, follow the [deployment runbook](DEPLOYMENT_GUIDE.md), including DB bootstrap before enabling services. Capture new evidence for the tested release. Talking points: [PROFESSOR_QA.md](PROFESSOR_QA.md).
 
 ## Tear down
 
-```bash
-cd cloud_project/terraform && terraform destroy
-```
+Follow the [approval-gated teardown](DEPLOYMENT_GUIDE.md#4-tear-down-after-separate-confirmation).

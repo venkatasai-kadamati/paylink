@@ -1,0 +1,26 @@
+{
+  "url": "https://dza8myi3womws.cloudfront.net",
+  "checks": [
+    "CloudFront HTTPS, API and PostgreSQL health; signed-out accounts return 401",
+    "Sai demo login, secure session reload and logout",
+    "Siddhardth demo login, secure session reload and logout",
+    "Two synthetic registrations each create one $200 starter account",
+    "Password login succeeds; wrong password is rejected with visible feedback",
+    "Account opening and username recipient lookup",
+    "Transfer UI, insufficient funds, invalid amount, and duplicate key produce one balanced debit/credit",
+    "Transfer history persists after reload and exports to CSV",
+    "Recipient reversal retains original history and restores both balances",
+    "Invitation is pending before acceptance; both joint owners have access after acceptance",
+    "PostgreSQL-backed insights load in the browser",
+    "No browser JavaScript errors"
+  ],
+  "sent_amount_cents": 1234,
+  "sender": "cloud_sender_51afeaec",
+  "recipient": "cloud_recipient_51afeaec",
+  "account_id": "3fcfeead-ba2b-4e21-99bd-b30732bce6e0",
+  "destination_id": "32c19c0c-5065-4ac2-ad7c-0637e55427b8",
+  "transfer_id": "dc9d68c6-39a0-4518-90bf-df7645ff324d",
+  "idempotency_key": "4dc6a9f4-565d-4227-a0e7-dfcb140e60d4",
+  "reversal_id": "a5081600-52d9-49e9-abb7-b9e7a0d5f0fc",
+  "invitation_id": "435562f1-fe04-4b67-8003-358ed3a07dce"
+}

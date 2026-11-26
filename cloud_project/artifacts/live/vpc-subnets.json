@@ -1,0 +1,44 @@
+[
+    {
+        "name": "paylink-class-demo-app-a",
+        "az": "us-east-1a",
+        "cidr": "10.42.10.0/24",
+        "state": "available",
+        "public_address_on_launch": false
+    },
+    {
+        "name": "paylink-class-demo-app-b",
+        "az": "us-east-1b",
+        "cidr": "10.42.11.0/24",
+        "state": "available",
+        "public_address_on_launch": false
+    },
+    {
+        "name": "paylink-class-demo-db-b",
+        "az": "us-east-1b",
+        "cidr": "10.42.21.0/24",
+        "state": "available",
+        "public_address_on_launch": false
+    },
+    {
+        "name": "paylink-class-demo-db-a",
+        "az": "us-east-1a",
+        "cidr": "10.42.20.0/24",
+        "state": "available",
+        "public_address_on_launch": false
+    },
+    {
+        "name": "paylink-class-demo-public-b",
+        "az": "us-east-1b",
+        "cidr": "10.42.1.0/24",
+        "state": "available",
+        "public_address_on_launch": true
+    },
+    {
+        "name": "paylink-class-demo-public-a",
+        "az": "us-east-1a",
+        "cidr": "10.42.0.0/24",
+        "state": "available",
+        "public_address_on_launch": true
+    }
+]

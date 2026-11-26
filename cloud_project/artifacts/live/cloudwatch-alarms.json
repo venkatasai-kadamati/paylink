@@ -1,0 +1,23 @@
+[
+    {
+        "name": "paylink-class-demo-alb-unhealthy-hosts",
+        "status": "INSUFFICIENT_DATA",
+        "metric": "UnHealthyHostCount",
+        "namespace": "AWS/ApplicationELB",
+        "period_seconds": 60
+    },
+    {
+        "name": "paylink-class-demo-backend-cpu-high",
+        "status": "INSUFFICIENT_DATA",
+        "metric": "CPUUtilization",
+        "namespace": "AWS/ECS",
+        "period_seconds": 60
+    },
+    {
+        "name": "paylink-class-demo-rds-cpu-high",
+        "status": "INSUFFICIENT_DATA",
+        "metric": "CPUUtilization",
+        "namespace": "AWS/RDS",
+        "period_seconds": 60
+    }
+]

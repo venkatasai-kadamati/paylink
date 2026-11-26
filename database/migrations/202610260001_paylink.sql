@@ -49,7 +49,7 @@ CREATE TABLE paylink.transfers (
 );
 CREATE INDEX transfers_source_time_idx ON paylink.transfers(source_account_id, created_at DESC, id DESC);
 CREATE INDEX transfers_destination_time_idx ON paylink.transfers(destination_account_id, created_at DESC, id DESC);
--- Supabase Data API roles get no access. Backend is the only trust boundary.
+-- Application database access is restricted to the backend role.
 ALTER TABLE paylink.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE paylink.banks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE paylink.bank_accounts ENABLE ROW LEVEL SECURITY;

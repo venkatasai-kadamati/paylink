@@ -1,0 +1,12 @@
+[
+    {
+        "name": "paylink-class-demo-alb",
+        "state": "active",
+        "scheme": "internal",
+        "type": "application",
+        "zones": [
+            "us-east-1b",
+            "us-east-1a"
+        ]
+    }
+]

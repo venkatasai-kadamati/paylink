@@ -1,0 +1,21 @@
+{
+  "fixture_invitation": "accepted",
+  "fixture_joint_holders": 2,
+  "fixture_opening_and_restored_balance_cents": 20000,
+  "fixture_postings": 4,
+  "fixture_reversal_linked": true,
+  "fixture_users": 2,
+  "originals_for_idempotency_key": 1,
+  "row_counts": {
+    "account_holders": 11,
+    "account_invitations": 1,
+    "bank_accounts": 9,
+    "banks": 3,
+    "transfer_postings": 18,
+    "transfer_reversals": 1,
+    "transfers": 9,
+    "users": 6
+  },
+  "unbalanced_transfers": 0,
+  "unreconciled_accounts": 0
+}

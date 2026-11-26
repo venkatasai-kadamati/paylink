@@ -1,5 +1,5 @@
 resource "aws_ecr_repository" "frontend" {
-  count = var.create_ecr_repositories ? 1 : 0
+  count = 1
 
   name                 = "${var.project_name}-frontend"
   image_tag_mutability = "MUTABLE"
@@ -15,7 +15,7 @@ resource "aws_ecr_repository" "frontend" {
 }
 
 resource "aws_ecr_repository" "backend" {
-  count = var.create_ecr_repositories ? 1 : 0
+  count = 1
 
   name                 = "${var.project_name}-backend"
   image_tag_mutability = "MUTABLE"
@@ -31,7 +31,7 @@ resource "aws_ecr_repository" "backend" {
 }
 
 resource "aws_ecr_lifecycle_policy" "frontend" {
-  count      = var.create_ecr_repositories ? 1 : 0
+  count      = 1
   repository = aws_ecr_repository.frontend[0].name
 
   policy = jsonencode({
@@ -49,7 +49,7 @@ resource "aws_ecr_lifecycle_policy" "frontend" {
 }
 
 resource "aws_ecr_lifecycle_policy" "backend" {
-  count      = var.create_ecr_repositories ? 1 : 0
+  count      = 1
   repository = aws_ecr_repository.backend[0].name
 
   policy = jsonencode({
@@ -67,6 +67,7 @@ resource "aws_ecr_lifecycle_policy" "backend" {
 }
 
 locals {
-  frontend_image = var.create_ecr_repositories ? "${aws_ecr_repository.frontend[0].repository_url}:${var.frontend_image_tag}" : ""
-  backend_image  = var.create_ecr_repositories ? "${aws_ecr_repository.backend[0].repository_url}:${var.backend_image_tag}" : ""
+  frontend_image  = "${aws_ecr_repository.frontend[0].repository_url}:${var.image_tag}"
+  backend_image   = "${aws_ecr_repository.backend[0].repository_url}:${var.image_tag}"
+  bootstrap_image = "${aws_ecr_repository.backend[0].repository_url}:${var.image_tag}-bootstrap"
 }

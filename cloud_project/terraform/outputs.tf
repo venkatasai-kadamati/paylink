@@ -69,14 +69,32 @@ output "cloudwatch_dashboard_name" {
   value = aws_cloudwatch_dashboard.main.dashboard_name
 }
 
-output "next_steps" {
-  value = <<-EOT
-    1) After apply: ../scripts/build_and_push.sh
-    2) REQUIRED data bootstrap (migrations + banks + Sai/Siddhardth quick-test profiles):
-         ../scripts/bootstrap_aws_data.sh
-       (or at minimum: ../scripts/run_migrations_ecs.sh which also seeds demo profiles)
-       Without this, Quick test sign-in returns 503.
-    3) Verify: curl cloudfront_url/api/health and click Sai / Siddhardth on the UI.
-    4) When finished: terraform destroy to stop credit burn.
-  EOT
+output "bootstrap_task_definition_arn" {
+  value = aws_ecs_task_definition.bootstrap.arn
+}
+
+output "bootstrap_network_configuration" {
+  value = {
+    awsvpcConfiguration = {
+      subnets        = aws_subnet.app[*].id
+      securityGroups = [aws_security_group.ecs_backend.id]
+      assignPublicIp = "DISABLED"
+    }
+  }
+}
+
+output "build_config" {
+  value = {
+    region              = var.aws_region
+    image_tag           = var.image_tag
+    public_demo_enabled = tostring(var.public_demo_enabled)
+  }
+}
+
+output "ecs_service_names" {
+  value = [aws_ecs_service.frontend.name, aws_ecs_service.backend.name]
+}
+
+output "alb_target_group_arns" {
+  value = [aws_lb_target_group.frontend.arn, aws_lb_target_group.backend.arn]
 }

@@ -1,0 +1,13 @@
+{
+    "name": "paylink-class-demo-postgres",
+    "status": "available",
+    "engine": "postgres",
+    "version": "16.13",
+    "instance_class": "db.t4g.micro",
+    "allocated_storage_gib": 20,
+    "multi_az": false,
+    "az": "us-east-1a",
+    "publicly_accessible": false,
+    "encrypted": true,
+    "backup_days": 1
+}

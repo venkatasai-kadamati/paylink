@@ -39,5 +39,25 @@ resource "aws_iam_role" "ecs_task" {
   assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
 }
 
-# Task role intentionally minimal — app uses Secrets Manager values injected at start
-# (no AWS API calls required from application code today).
+resource "aws_iam_role" "bootstrap_execution" {
+  name               = "${var.project_name}-bootstrap-execution"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "bootstrap_execution_managed" {
+  role       = aws_iam_role.bootstrap_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+resource "aws_iam_role_policy" "bootstrap_execution_secrets" {
+  name = "${var.project_name}-bootstrap-execution-secrets"
+  role = aws_iam_role.bootstrap_execution.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = [aws_secretsmanager_secret.db_admin.arn, aws_secretsmanager_secret.app.arn]
+    }]
+  })
+}

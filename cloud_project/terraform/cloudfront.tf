@@ -27,6 +27,12 @@ resource "aws_cloudfront_vpc_origin" "alb" {
   tags = {
     Name = "${var.project_name}-vpc-origin"
   }
+
+  depends_on = [
+    aws_internet_gateway.main,
+    aws_lb_listener.http,
+    aws_vpc_security_group_ingress_rule.alb_http_from_cloudfront,
+  ]
 }
 
 locals {
@@ -83,7 +89,6 @@ resource "aws_cloudfront_distribution" "app" {
 
   viewer_certificate {
     cloudfront_default_certificate = true
-    minimum_protocol_version       = "TLSv1.2_2021"
   }
 
   tags = {

@@ -2,7 +2,7 @@
 
 Infrastructure-as-Code deployment of PayLink (Next.js + FastAPI + PostgreSQL) on AWS, matching the course service and network diagrams.
 
-This stack creates billable resources (NAT Gateway, Multi-AZ RDS, Fargate, ALB, CloudFront). Destroy when idle.
+This isolated class stack uses Amazon RDS PostgreSQL for all application data and Amazon S3 for remote application Terraform state. **Do not provision, deploy, run AWS tests, or tear down without Venkatasai's explicit approval.** See the [AWS guide and service inventory](docs/AWS_GUIDE.md) and [estimated costs](docs/COST_NOTES.md).
 
 ## Architecture
 
@@ -35,7 +35,8 @@ Browser --HTTPS--> CloudFront --VPC Origin (private)--> Internal ALB (1)
 
 | Path                                  | Purpose                                      |
 | ------------------------------------- | -------------------------------------------- |
-| `terraform/`                          | AWS IaC                                      |
+| `terraform/`                          | Application IaC and mocked plan tests       |
+| `terraform/state/`                    | Versioned, encrypted S3 state bucket IaC     |
 | `docker/`                             | Images for ECR                               |
 | `scripts/`                            | Build/push, plan helpers, DB bootstrap       |
 | `docs/diagrams/`                      | Service + network diagrams (1 ALB clarified) |
@@ -47,19 +48,9 @@ Browser --HTTPS--> CloudFront --VPC Origin (private)--> Internal ALB (1)
 | `artifacts/screenshots/`              | UI, Console, ad-hoc proof                    |
 | `artifacts/video/`                    | Showcase MP4                                 |
 
-## Deploy
+## Validate and deploy
 
-1. Configure AWS credentials for the class account.
-2. `cp terraform/terraform.tfvars.example terraform/terraform.tfvars` and edit.
-3. `cd terraform && terraform init && terraform plan -out=tfplan`
-4. Review plan (especially NAT + RDS).
-5. `terraform apply tfplan`
-6. `../scripts/build_and_push.sh`
-7. `../scripts/bootstrap_aws_data.sh` (migrations + banks + Sai/Siddhardth quick-test)
-8. Open the CloudFront URL from `terraform output`
-9. When finished: `terraform destroy`
-
-Details: [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md).
+Use the [deployment runbook](docs/DEPLOYMENT_GUIDE.md) for offline validation and the approval-gated sequence: configure S3 state → plan the foundation → publish ARM64 images → bootstrap the database → enable ECS services → verify through CloudFront → tear down the disposable stack.
 
 ## Professor Q&A
 
